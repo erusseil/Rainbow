@@ -12,7 +12,18 @@ import astropy.constants as c
 import matplotlib.pyplot as plt
 
 
+def Am_to_Hz(wl):
+    return c.c.value/(wl*1e-10)
+
 SATURATION_FLUX = 1e5
+
+nu_u = Am_to_Hz(3751.36)
+nu_g = Am_to_Hz(4741.64)
+nu_r = Am_to_Hz(6173.23)
+nu_i = Am_to_Hz(7501.62)
+nu_z = Am_to_Hz(8679.19)
+nu_Y = Am_to_Hz(9711.53)
+freq_dic = {'u ':nu_u, 'g ':nu_g, 'r ':nu_r, 'i ':nu_i, 'z ':nu_z, 'Y ':nu_Y}
 
 
 def parse_fits_snana(head: Union[str, Path], phot: Union[str, Path],
@@ -53,6 +64,10 @@ def parse_fits_snana(head: Union[str, Path], phot: Union[str, Path],
 def Fbaz(t, a, t0, tfall, trise):
     return a * np.exp(-(t - t0) / tfall) / (1 + np.exp((t - t0) / trise))
 
+# With flux baseline
+def FbazB(t, a, b, t0, tfall, trise):
+    return Fbaz(t, a, t0, tfall, trise) + b
+
 # Temperature computed using sigmoid
 def Tsig(t, Tmin, dT, ksig, t0, tT):
     return Tmin + dT/(1+np.exp((t-(t0+tT))/ksig))
@@ -88,7 +103,6 @@ def perform_fit(obj):
     global_fluxerr = obj['FLUXCALERR']
     global_nu = obj['NU']
     global_mjd = obj['MJD']
-    global_freq = obj['NU']
 
     parameters_dict = {"a": global_flux.max(), "t0": global_mjd[np.argmax(global_flux)], "tT": 0,\
                    "tfall": 30, "trise":-5, "Tmin":4000, "dT":7000, "ksig":4}
@@ -97,22 +111,63 @@ def perform_fit(obj):
     fit = Minuit(least_squares,
              limit_Tmin=(1000, 100000),
              limit_dT=(0, 100000),
-             limit_t0=(-100, 100),
+             limit_t0=(-200, 200),
              limit_tT=(-100, 100),
-             limit_a=(0.01, 100), 
-             limit_ksig=(0.01,100),
-             limit_trise=(-100, 0),
-             limit_tfall=(0,1000),
+             limit_a=(0.01, 40), 
+             limit_ksig=(0.01, 50),
+             limit_trise=(-30, 0),
+             limit_tfall=(0,500),
              **parameters_dict)
     fit.migrad()
     
-    return fit.values
+    
+    max_flux = obj['max_flux'][0]
+    max_time = obj['max_flux_time'][0]
+    fit_error = fit.fval
+    
+    additionnal = [fit_error, max_flux, max_time]
+    
+    return fit.values, additionnal
+
+def perform_bazin_fit(all_obj):
+    
+    all_parameters = []
+    
+    for band in ['g ','r ','i ']:
+    
+        obj = all_obj[all_obj['BAND']==band]
+        global_flux = obj['FLUXCAL']
+        global_fluxerr = obj['FLUXCALERR']
+        global_mjd = obj['MJD']
+
+        parameters_dict = {"a": global_flux.max(), "t0": global_mjd[np.argmax(global_flux)], "tfall": 30, "trise":-5}
+
+        least_squares = LeastSquares(global_mjd, global_flux, global_fluxerr, Fbaz)
+        fit = Minuit(least_squares,
+                 limit_t0=(-200, 200),
+                 limit_a=(0.01, 40), 
+                 limit_trise=(-30, 0),
+                 limit_tfall=(0,500),
+                 **parameters_dict)
+        fit.migrad()
+
+
+        max_flux = obj['max_flux'][0]
+        max_time = obj['max_flux_time'][0]
+        fit_error = fit.fval
+
+        additionnal = [fit_error, max_flux, max_time]
+
+        all_parameters.append([fit.values, additionnal])
+        
+        
+    return all_parameters #Of the form  [[param_g, extra_g], [param_r, extra_r], [param_i, extra_i]]
+
 
 def plot_gri(obj, parameters):
     
     colors = {'g ': 'green', 'r ': 'red', 'i ': 'black'}
     
-    print(parameters)
     plt.figure(figsize=(17,5))
     
     for id_plot, band in enumerate(['g ','r ','i ']):    

@@ -21,7 +21,7 @@ def extract(lcs, name, split):
         extraction = efe.perform_fit(obj)
         all_param.append(extraction[0].values() + extraction[1])
 
-    features = pd.DataFrame(columns=efe.Fnu.__code__.co_varnames[1:9]+('error', 'max_flux', 'max_time'), data = all_param)
+    features = pd.DataFrame(columns=efe.Fnu.__code__.co_varnames[1:9]+('error', 'max_flux', 'max_time', 'true_peak'), data = all_param)
     
     if not os.path.exists(f'features/sub_features/{name}'):
         os.mkdir(f'features/sub_features/{name}')
@@ -47,10 +47,10 @@ def extract_bazin(lcs, name, split):
             
             obj_param.append(param[idx_band][0].values() + [param[idx_band][1][0]]) # For each band add only error as extra param
             
-        flat_obj_param = [x for xs in obj_param for x in xs] + param[0][1][1:] # Add ONCE the max flux and max time paramters
+        flat_obj_param = [x for xs in obj_param for x in xs] + param[0][1][1:] # Add ONCE the max flux and max time and real peak paramters
         all_param.append(flat_obj_param)
         
-    flat_name_param = [x for xs in name_param for x in xs] + ['max_flux', 'max_time'] # Add ONCE the max flux and max time paramters
+    flat_name_param = [x for xs in name_param for x in xs] + ['max_flux', 'max_time', 'true_peak'] # Add ONCE the max flux and max time and real peak paramters
     
     
     features = pd.DataFrame(columns=flat_name_param, data = all_param)

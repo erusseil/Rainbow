@@ -17,12 +17,12 @@ def Am_to_Hz(wl):
 
 SATURATION_FLUX = 1e5
 
-nu_u = Am_to_Hz(3751.36)
-nu_g = Am_to_Hz(4741.64)
-nu_r = Am_to_Hz(6173.23)
-nu_i = Am_to_Hz(7501.62)
-nu_z = Am_to_Hz(8679.19)
-nu_Y = Am_to_Hz(9711.53)
+nu_u = Am_to_Hz(3751)
+nu_g = Am_to_Hz(4742)
+nu_r = Am_to_Hz(6173)
+nu_i = Am_to_Hz(7502)
+nu_z = Am_to_Hz(8679)
+nu_Y = Am_to_Hz(9711)
 freq_dic = {'u ':nu_u, 'g ':nu_g, 'r ':nu_r, 'i ':nu_i, 'z ':nu_z, 'Y ':nu_Y}
 
 
@@ -87,13 +87,6 @@ def Fnu(x, a, t0, tT, tfall, trise, Tmin, dT, ksig):
 def Am_to_Hz(wl):
     return c.c.value/(wl*1e-10)
 
-nu_u = Am_to_Hz(3751.36)
-nu_g = Am_to_Hz(4741.64)
-nu_r = Am_to_Hz(6173.23)
-nu_i = Am_to_Hz(7501.62)
-nu_z = Am_to_Hz(8679.19)
-nu_Y = Am_to_Hz(9711.53)
-freq_dic = {'u ':nu_u, 'g ':nu_g, 'r ':nu_r, 'i ':nu_i, 'z ':nu_z, 'Y ':nu_Y}
 
 def perform_fit(obj):
     
@@ -124,8 +117,9 @@ def perform_fit(obj):
     max_flux = obj['max_flux'][0]
     max_time = obj['max_flux_time'][0]
     fit_error = fit.fval
+    peak = obj.meta['PEAKMJD']
     
-    additionnal = [fit_error, max_flux, max_time]
+    additionnal = [fit_error, max_flux, max_time, peak]
     
     return fit.values, additionnal
 
@@ -155,13 +149,14 @@ def perform_bazin_fit(all_obj):
         max_flux = obj['max_flux'][0]
         max_time = obj['max_flux_time'][0]
         fit_error = fit.fval
+        peak = all_obj.meta['PEAKMJD']
 
-        additionnal = [fit_error, max_flux, max_time]
+        additionnal = [fit_error, max_flux, max_time, peak]
 
         all_parameters.append([fit.values, additionnal])
         
         
-    return all_parameters #Of the form  [[param_g, extra_g], [param_r, extra_r], [param_i, extra_i]]
+    return all_parameters  #Of the form  [[param_g, extra_g], [param_r, extra_r], [param_i, extra_i]]
 
 
 def plot_gri(obj, parameters):

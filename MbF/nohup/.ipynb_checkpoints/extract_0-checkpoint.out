@@ -1,9 +1,0 @@
-ok
-loading data for sub 0
-0 done
-Traceback (most recent call last):
-  File "feature_extraction.py", line 47, in <module>
-    f_extract(sub_data, name, split)
-  File "/media3/etienne/workdir/spark_AGN/ELAsTiCC/Multiple_band_fit/MbF/data_processing.py", line 373, in extract_mbf
-    extraction = perform_fit(obj)
-NameError: name 'perform_fit' is not defined

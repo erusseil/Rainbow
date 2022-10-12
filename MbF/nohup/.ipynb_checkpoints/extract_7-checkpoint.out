@@ -1,6 +1,0 @@
-ok
-loading data for sub 7
-Traceback (most recent call last):
-  File "feature_extraction.py", line 32, in <module>
-    with open(f'data/preprocessed/{name}.pkl', 'rb') as handle:
-FileNotFoundError: [Errno 2] No such file or directory: 'data/preprocessed/SNII-NMF.pkl'

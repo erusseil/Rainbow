@@ -14,6 +14,7 @@ import subprocess
 import shlex
 from iminuit import Minuit
 from iminuit.cost import LeastSquares
+import kernel as kern
 import time
 import shutil
 
@@ -50,8 +51,8 @@ def preprocess(object_class):
         list of astropy tables. Each table is one light curve.
     """
     
-    heads = sorted(glob.glob(f'/media/ELAsTICC/data/training_sample/ELASTICC_TRAIN_{object_class}/*_HEAD.FITS.gz'))
-    phots = sorted(glob.glob(f'/media/ELAsTICC/data/training_sample/ELASTICC_TRAIN_{object_class}/*_PHOT.FITS.gz'))
+    heads = sorted(glob.glob(f'{kern.ELASTiCC_path}{object_class}/*_HEAD.FITS.gz'))
+    phots = sorted(glob.glob(f'{kern.ELASTiCC_path}{object_class}/*_PHOT.FITS.gz'))
     assert len(heads) != 0, 'no *_HEAD_FITS.gz are found'
     assert len(heads) == len(phots), 'there are different number of HEAD and PHOT files'
 
@@ -76,7 +77,7 @@ def preprocess(object_class):
         lc['MJD'] = lc['MJD'] - t_maxi
     
     # Save preprocessed data as pkl for later use
-    if not os.path.exists('data'):
+    if not os.path.exists('data'):Margeride - Arrêt de tramway Ligne A
         os.mkdir('data')
         
     if not os.path.exists('data/preprocessed'):
@@ -497,6 +498,12 @@ if __name__ == '__main__':
     features = pd.concat([pd.read_parquet(temp_path+ f) for f in all_filenames[isfeatures]],ignore_index=True)
     
     total_time = time.time() - start_time
+    
+    if not os.path.exists('data/features'):
+        os.mkdir('data/features')
+        
+    if not os.path.exists(f'data/features/{fex_function}'):
+        os.mkdir(f'data/features/{fex_function}')
     
     features.to_parquet(f'data/features/{fex_function}/{object_class}_features.parquet')
     

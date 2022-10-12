@@ -1,0 +1,17 @@
+loading data for sub 8
+8 done
+Traceback (most recent call last):
+  File "feature_extraction.py", line 44, in <module>
+    f_extract(sub_data, name, split)
+  File "/media3/etienne/workdir/spark_AGN/ELAsTiCC/Multiple_band_fit/MbF/data_processing.py", line 373, in extract_mbf
+    extraction = perform_fit_mbf(obj)
+  File "/media3/etienne/workdir/spark_AGN/ELAsTiCC/Multiple_band_fit/MbF/data_processing.py", line 289, in perform_fit_mbf
+    least_squares = LeastSquares(np.array([global_mjd, global_nu]).T, global_flux, global_fluxerr, Fnu)
+  File "/media3/etienne/science_module_env/lib/python3.6/site-packages/iminuit/cost.py", line 930, in __init__
+    data = np.column_stack(np.broadcast_arrays(*x, y, yerror))
+  File "<__array_function__ internals>", line 6, in broadcast_arrays
+  File "/media3/etienne/science_module_env/lib/python3.6/site-packages/numpy/lib/stride_tricks.py", line 258, in broadcast_arrays
+    shape = _broadcast_shape(*args)
+  File "/media3/etienne/science_module_env/lib/python3.6/site-packages/numpy/lib/stride_tricks.py", line 196, in _broadcast_shape
+    b = np.broadcast(b, *args[pos:(pos + 31)])
+ValueError: shape mismatch: objects cannot be broadcast to a single shape

@@ -1,0 +1,14 @@
+loading data for sub 6
+6 done
+Traceback (most recent call last):
+  File "feature_extraction.py", line 44, in <module>
+    f_extract(sub_data, name, split)
+  File "/media3/etienne/workdir/spark_AGN/ELAsTiCC/Multiple_band_fit/MbF/data_processing.py", line 393, in extract_bazin
+    param = perform_fit_bazin(obj)
+  File "/media3/etienne/workdir/spark_AGN/ELAsTiCC/Multiple_band_fit/MbF/data_processing.py", line 358, in perform_fit_bazin
+    **parameters_dict)
+  File "/media3/etienne/science_module_env/lib/python3.6/site-packages/iminuit/minuit.py", line 617, in __init__
+    self._init_state = _make_init_state(self._pos2var, start, kwds)
+  File "/media3/etienne/science_module_env/lib/python3.6/site-packages/iminuit/minuit.py", line 2039, in _make_init_state
+    f"{kw} is not one of the parameters [{' '.join(pos2var)}]"
+RuntimeError: limit_a is not one of the parameters [a t0 tfall trise]

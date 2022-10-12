@@ -1,0 +1,8 @@
+/media3/etienne/workdir/spark_AGN/ELAsTiCC/Multiple_band_fit/MbF/data_processing.py:195: RuntimeWarning: overflow encountered in exp
+  return Tmin + dT/(1+np.exp((t-(t0+tT))/ksig))
+/media3/etienne/workdir/spark_AGN/ELAsTiCC/Multiple_band_fit/MbF/data_processing.py:168: RuntimeWarning: overflow encountered in exp
+  return a * np.exp(-(t - t0) / tfall) / (1 + np.exp((t - t0) / trise))
+/media3/etienne/workdir/spark_AGN/ELAsTiCC/Multiple_band_fit/MbF/data_processing.py:168: RuntimeWarning: invalid value encountered in true_divide
+  return a * np.exp(-(t - t0) / tfall) / (1 + np.exp((t - t0) / trise))
+/media3/etienne/genetic_env/lib/python3.6/site-packages/iminuit/cost.py:30: RuntimeWarning: overflow encountered in multiply
+  return z * z

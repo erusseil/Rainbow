@@ -532,15 +532,19 @@ if __name__ == "__main__":
         ]
     )
 
-    while n_computed_files != cores:
-        time.sleep(0.5)
-        n_computed_files = len(
-            [
-                entry
-                for entry in os.listdir(temp_path)
-                if os.path.isfile(os.path.join(temp_path, entry))
-            ]
-        )
+    while (n_computed_files != cores):
+        
+        if (time.time() - start_time)<(3600*kern.max_computation_time):
+            time.sleep(0.5)
+            n_computed_files = len(
+                [
+                    entry
+                    for entry in os.listdir(temp_path)
+                    if os.path.isfile(os.path.join(temp_path, entry))
+                ]
+            )
+        else:
+            raise RuntimeError('Computation time reached maximimum allowed time. Main job has been killed')
 
     all_filenames = np.sort(np.array(os.listdir(temp_path)))
 

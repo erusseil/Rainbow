@@ -62,14 +62,12 @@ def preprocess(object_class, max_n):
 
     min_det_per_band = {b"g ": 4, b"r ": 4, b"i ": 4}
 
-    # merge list of lists into a single list
-    lcs = list(
-        chain.from_iterable(
-            parse_fits_snana(head, phot, min_det_per_band=min_det_per_band)
-            for head, phot in zip(heads, phots)
-        )
-    )
+    lcs = []
     
+    for head, phot in zip(heads, phots):
+        if len(lcs)<max_n:
+            lcs += list(parse_fits_snana(head, phot, min_det_per_band=min_det_per_band))
+
     n_objects = int(np.where(max_n<=len(lcs), max_n, len(lcs)))
     lcs = random.sample(lcs, n_objects)
 

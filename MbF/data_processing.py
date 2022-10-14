@@ -17,6 +17,7 @@ from iminuit.cost import LeastSquares
 import kernel as kern
 import time
 import shutil
+import random
 
 
 def Am_to_Hz(wl):
@@ -35,7 +36,7 @@ def Am_to_Hz(wl):
     return c.c.value / (wl * 1e-10)
 
 
-def preprocess(object_class):
+def preprocess(object_class, max_n):
 
     """
     Preprocess raw ELASTiCC training sample. Apply cuts on
@@ -43,9 +44,11 @@ def preprocess(object_class):
 
     Parameters
     ----------
-    object_class : str
+    object_class: str
         Name of the ELASTiCC class to compute
-
+    max_n: int
+        Maximum number of object to compute
+        
     Returns
     -------
     lcs : list
@@ -66,6 +69,9 @@ def preprocess(object_class):
             for head, phot in zip(heads, phots)
         )
     )
+    
+    n_objects = int(np.where(max_n<=len(lcs), max_n, len(lcs)))
+    lcs = random.sample(lcs, n_objects)
 
     for idx, lc in enumerate(lcs):
 
@@ -498,15 +504,17 @@ if __name__ == "__main__":
     of ELASTiCC.
     Take 4 arguments :
         1 : str, Name of the class
-        2 : str, Which method to use for feature extraction ('bazin' or 'mbf')
-        3 : int, Number of cores to use
-        4 : str, has the data been preprocessed already ('True' or 'False')
+        2 : int, Maximum number of objects to consider
+        3 : str, Which method to use for feature extraction ('bazin' or 'mbf')
+        4 : int, Number of cores to use
+        5 : str, has the data been preprocessed already ('True' or 'False')
     """
 
     object_class = str(sys.argv[1])
-    fex_function = str(sys.argv[2])
-    cores = int(sys.argv[3])
-    already_prepro = str(sys.argv[4])
+    n_max = int(sys.argv[2])
+    fex_function = str(sys.argv[3])
+    cores = int(sys.argv[4])
+    already_prepro = str(sys.argv[5])
 
     if not os.path.exists(f"data/features/{fex_function}/"):
         os.mkdir(f"data/features/{fex_function}/")
@@ -515,7 +523,7 @@ if __name__ == "__main__":
         os.mkdir(f"data/features/{fex_function}/{object_class}")
 
     if already_prepro == "False":
-        preprocess(object_class)
+        preprocess(object_class, n_max)
 
     start_time = time.time()
 

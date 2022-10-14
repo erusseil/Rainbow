@@ -57,7 +57,7 @@ def preprocess(object_class):
     assert len(heads) != 0, "no *_HEAD_FITS.gz are found"
     assert len(heads) == len(phots), "there are different number of HEAD and PHOT files"
 
-    min_det_per_band = {b"g ": 1, b"r ": 1, b"i ": 1}
+    min_det_per_band = {b"g ": 4, b"r ": 4, b"i ": 4}
 
     # merge list of lists into a single list
     lcs = list(

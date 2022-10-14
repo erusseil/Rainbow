@@ -562,12 +562,6 @@ if __name__ == "__main__":
 
     total_time = time.time() - start_time
 
-    if not os.path.exists("data/features"):
-        os.mkdir("data/features")
-
-    if not os.path.exists(f"data/features/{fex_function}"):
-        os.mkdir(f"data/features/{fex_function}")
-
     features.to_parquet(f"data/features/{fex_function}/{object_class}_features.parquet")
 
     with open(f"data/features/{fex_function}/{object_class}_info.txt", "w") as f:

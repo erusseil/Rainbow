@@ -141,6 +141,11 @@ def parse_fits_snana(
         # we use this variable for cuts only, while putting the full light curve into dataset
         detections = lc[(lc["PHOTFLAG"] != 0)]
         det_per_band = dict(zip(*np.unique(detections["BAND"], return_counts=True)))
+        
+        # We requiere to have observation before and after peak
+        if (lc.meta['SIM_PEAKMJD'] < detections['MJD'][0]
+                 or lc.meta['SIM_PEAKMJD'] > detections['MJD'][-1]):
+            continue
 
         # Not enough number of detections in some passband
         for band, min_det in min_det_per_band.items():

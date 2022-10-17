@@ -323,12 +323,12 @@ def perform_fit_mbf(obj):
     )
     fit = Minuit(
         least_squares,
-        limit_Tmin=(1000, 100000),
+        limit_Tmin=(100, 100000),
         limit_dT=(0, 100000),
-        limit_t0=(-200, 200),
-        limit_tT=(-100, 100),
+        limit_t0=(-200, 400),
+        limit_tT=(-300, 300),
         limit_a=(0.01, 40),
-        limit_ksig=(0.01, 200),
+        limit_ksig=(0.01, 300),
         limit_trise=(-200, 0),
         limit_tfall=(0, 500),
         **parameters_dict,
@@ -392,7 +392,7 @@ def perform_fit_bazin(obj):
         fit = Minuit(
             least_squares,
             limit_a=(0.01, 40),
-            limit_t0=(-200, 200),
+            limit_t0=(-200, 400),
             limit_trise=(-200, 0),
             limit_tfall=(0, 500),
             **parameters_dict,

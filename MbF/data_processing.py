@@ -105,7 +105,7 @@ def parse_fits_snana(
     """
     Reads ELASTiCC training data. Returns it after applying cuts
     on passbands, number of points and saturation flux. 
-    Also requieres at least one point before and after peak.
+    Also requires at least one point before and after peak.
 
     Parameters
     ----------
@@ -328,8 +328,8 @@ def perform_fit_mbf(obj):
         limit_t0=(-200, 200),
         limit_tT=(-100, 100),
         limit_a=(0.01, 40),
-        limit_ksig=(0.01, 50),
-        limit_trise=(-30, 0),
+        limit_ksig=(0.01, 200),
+        limit_trise=(-200, 0),
         limit_tfall=(0, 500),
         **parameters_dict,
     )
@@ -393,7 +393,7 @@ def perform_fit_bazin(obj):
             least_squares,
             limit_a=(0.01, 40),
             limit_t0=(-200, 200),
-            limit_trise=(-30, 0),
+            limit_trise=(-200, 0),
             limit_tfall=(0, 500),
             **parameters_dict,
         )

@@ -18,8 +18,11 @@ In order to run a feature extraction using either the "bazin" method or the "mfb
 
 To start the feature extraction run :
 
+```python
   python data_processing.py 'target' max_number_of_objects 'method' number_of_core_to_use 'has_data_been_preprocessed_already'
+```
   
 For example if I want to feature extract for the first time at most 10000 objects of the class "PISN" using 10 cores with the mfb method :
-
+```python
   python data_processing.py 'PISN' 10000 'mfb' 10 'False'
+```

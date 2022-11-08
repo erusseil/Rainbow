@@ -24,5 +24,5 @@ To start the feature extraction run :
   
 For example if I want to feature extract for the first time at most 10000 objects of the class "PISN" using 10 cores with the mfb method :
 ```python
-  python data_processing.py 'PISN' 10000 'mfb' 10 'False'
+  python data_processing.py 'PISN' 10000 'mbf' 10 'False'
 ```

@@ -3,7 +3,7 @@ The usual way to extract features from a transient object is to fit it's lightcu
 The fitted parameter value sare then used as features, ensuring the same number of parameters for all objects.
 
 
-A function commonly used to describe transient events is the Bazin function, which requieres 5 free parameters : https://arxiv.org/pdf/1701.05689.pdf.
+A function commonly used to describe transient events is the Bazin function, which requires 5 free parameters : https://arxiv.org/pdf/1701.05689.pdf.
 It needs to be applied to each telescope filter, which in the case of LSST (https://www.lsst.org/) will be 6. 
 That feature extraction method results in too many features, with too many correlations.
 
@@ -14,7 +14,7 @@ ADD MATH DETAILS
 In order to evaluate and compare the standard method to the MfB we will be using the ELASTiCC data set (https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/ELASTICC/).
 It is a simulation of future LSST data and should be suited for the test. The data used can be found here : https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/ELASTICC/TRAINING_SAMPLES/.
 
-In order to run a feature extraction using either the "bazin" method or the "mfb" method you should first specify the path of your data in the kernel.py file.
+In order to run a feature extraction using either the "bazin" method or the "mbf" method you should first specify the path of your data in the kernel.py file.
 
 To start the feature extraction run :
 

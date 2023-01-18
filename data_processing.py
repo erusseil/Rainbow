@@ -38,6 +38,22 @@ def Am_to_Hz(wl):
 
 
 def generate_plasticc_lcs(object_class, field):
+    """
+    PLAsTiCC lightcurve generator to the correct format
+    
+    Parameters
+    ----------
+    object_class: str
+        Name of the PLAsTiCC class to compute
+    field: str
+        LSST cadence to use : 'wfd' or 'ddf'
+        
+    Yields
+    ------
+    table : astropytable
+        Formatted lightcurve table. Ensures that the minimum
+        number of points from kernel.py is respected
+    """
     
     meta = pd.read_csv(f'{kern.plasticc_path}/plasticc_test_metadata.csv.gz', index_col='object_id')
     meta = meta[meta['true_target'] == object_class]
@@ -78,12 +94,26 @@ def generate_plasticc_lcs(object_class, field):
             
             yield table
 
-def generate_plasticc_YSE(object_class, field):
+def generate_plasticc_YSE(object_class):
+    """
+    YSE lightcurve generator to the correct format
     
-    meta = pd.read_csv('data_YSE/YSE_plasticc_meta.csv', index_col='object_id')
+    Parameters
+    ----------
+    object_class: str
+        Name of the YSE class to compute
+        
+    Yields
+    ------
+    table : astropytable
+        Formatted lightcurve table. Ensures that the minimum
+        number of points from kernel.py is respected
+    """
+    
+    meta = pd.read_csv(f'{kern.YSE_path}/YSE_plasticc_meta.csv', index_col='object_id')
     meta = meta[meta['true_target'] == object_class]
     
-    file_name = 'data_YSE/YSE_plasticc_data.csv'
+    file_name = f'{kern.YSE_path}/YSE_plasticc_data.csv'
     df = pd.read_csv(file_name, index_col='object_id')
     
     for object_id, table in df.groupby('object_id'):
@@ -112,11 +142,28 @@ def generate_plasticc_YSE(object_class, field):
         yield table
 
 
-def preprocess_plasticc(object_class, max_n, field):    
+def preprocess_plasticc(object_class, max_n, field):
+    """
+    Use plasticc generator, normalize and aggregate
+    the light curves
+    
+    Parameters
+    ----------
+    object_class: str
+        Name of the PLAsTiCC class to compute
+    max_n: int
+        Maximum number of light curves to aggregate.
+    field: str
+        LSST cadence to use : 'wfd' or 'ddf'
+        
+    Returns
+    -------
+    lcs : list
+        List of preprocessed and formatted astropy tables.
+    """
+        
     lcs = []
     for idx, lc in zip(range(max_n), generate_plasticc_lcs(object_class, field)):
-        if idx % 100 == 0:
-            print(idx)
         lc = normalize(lc)
         lcs.append(lc)
         
@@ -135,22 +182,38 @@ def preprocess_plasticc(object_class, max_n, field):
     return lcs
 
 
-def preprocess_YSE(object_class, max_n, field):    
-    lcs = []
-    for idx, lc in zip(range(max_n), generate_plasticc_YSE(object_class, field)):
-        if idx % 100 == 0:
-            print(idx)
+def preprocess_YSE(object_class, max_n, field):
+    """
+    Use YSE generator, normalize and aggregate
+    the light curves
+    
+    Parameters
+    ----------
+    object_class: str
+        Name of the PLAsTiCC class to compute
+    max_n: int
+        Maximum number of light curves to aggregate.
+    field: str
+        fake LSST cadence for file naming only.
+        
+    Returns
+    -------
+    lcs : list
+        List of preprocessed and formatted astropy tables.
+    """
 
+    lcs = []
+    for idx, lc in zip(range(max_n), generate_plasticc_YSE(object_class)):
         lc = normalize(lc)
         lcs.append(lc)
-        
+
     # Save preprocessed data as pkl for later use
     if not os.path.exists("data_plasticc"):
         os.mkdir("data_plasticc")
 
     if not os.path.exists("data_plasticc/preprocessed"):
         os.mkdir("data_plasticc/preprocessed")
-        
+
     file = f"data_plasticc/preprocessed/{kern.PLASTICC_TARGET_INV.get(object_class)}_{field}.pkl"
 
     with open(file, "wb") as handle:
@@ -160,6 +223,23 @@ def preprocess_YSE(object_class, max_n, field):
 
 
 def normalize(lc):
+    """
+    Apply normalization transformation to
+    an astropy table light curve
+    
+    Parameters
+    ----------
+    lc: astropy table
+        Light curve
+
+    Returns
+    -------
+    lc : astropy table
+        Normalized light curve with :
+        - Fluxes divided by max g band flux
+        - Time 0 shifted by time of max g band flux
+        - Added columns before normalization : max_flux, max_flux_time
+    """
 
     gband = lc[lc["BAND"] == "g "]
     maxi = gband["FLUXCAL"].max()
@@ -304,7 +384,8 @@ def parse_fits_snana(
 
 def Fbaz(t, a, t0, tfall, trise):
     """
-    Compute flux using Bazin.
+    Compute flux using Bazin with
+    baseline fixed to 0.
 
     Parameters
     ----------
@@ -641,6 +722,23 @@ def extract_bazin(lcs, object_class, split, database):
 
         
 def train_test_cutting_generator(prepro):
+    """
+    Remove random windows of detected points.
+    Use removed points to create testing dataset.
+    Use remaining points to create training dataset
+    Ensures that the training datasets has enough points.
+
+    Parameters
+    ----------
+    prepro: list
+        List of preprocessed astropy table lightcurves
+    
+    Yields
+    ------
+    train, test
+        astropy table, astropy table
+    """
+        
     for obj in prepro:
         invalid_band = False
         all_bands_train, all_bands_test = [], []
@@ -690,6 +788,22 @@ def train_test_cutting_generator(prepro):
         
         
 def train_test_rising_cutting_generator(prepro):
+    """
+    Choose a random point during rising phase, remove all points after this.
+    Use removed points to create testing dataset.
+    Use remaining points to create training dataset
+    Ensures that the training datasets has enough points.
+
+    Parameters
+    ----------
+    prepro: list
+        List of preprocessed astropy table lightcurves
+    
+    Yields
+    ------
+    train, test
+        astropy table, astropy table
+    """
     for obj in prepro:
         invalid_band = False
         all_bands_train, all_bands_test = [], []

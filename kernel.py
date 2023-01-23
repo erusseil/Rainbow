@@ -1,8 +1,15 @@
 import numpy as np
 
+main_path = '/media3/etienne/workdir/spark_AGN/ELAsTiCC/Multiple_band_fit'
+
 ELASTiCC_path = '/media/ELAsTICC/data/training_sample/ELASTICC_TRAIN_'
 plasticc_path = '/media/RESSPECT/data/PLAsTiCC/PLAsTiCC_zenodo'
-YSE_path = '/media3/etienne/workdir/spark_AGN/ELAsTiCC/Multiple_band_fit/data_YSE'
+YSE_path = main_path + '/data_YSE'
+
+ELASTiCC_train_path = main_path + '/data/train-test'
+plasticc_train_path = main_path + '/data_plasticc/train-test'
+YSE_train_path = YSE_path + '/train-test'
+
 max_computation_time = 10
 min_det_per_band = {"g ": 4, "r ": 4, "i ": 4}
 min_det_per_band_YSE = {"g ": 1, "r ": 1, 'PSg':1, 'PSr':1, 'PSi':1}

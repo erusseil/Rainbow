@@ -14,12 +14,12 @@ if __name__ == "__main__":
     if str_extract == "bazin":
         f_extract = dp.extract_bazin
 
-    elif str_extract == "mbf":
-        f_extract = dp.extract_mbf
+    elif str_extract == "rainbow":
+        f_extract = dp.extract_rainbow
 
     if database == 'elasticc':
         # DATA
-        with open(f"data/preprocessed/{object_class}.pkl", "rb") as handle:
+        with open(f"data_elasticc/preprocessed/{object_class}.pkl", "rb") as handle:
             data = pickle.load(handle)
             
     elif (database == 'plasticc') or (database == 'YSE'):

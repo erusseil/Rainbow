@@ -210,7 +210,7 @@ def format_YSE(object_class, max_n, field):
     if not os.path.exists("data_plasticc/formatted"):
         os.mkdir("data_plasticc/formatted")
 
-    file = f"data_plasticc/formatted/{kern.PLASTICC_TARGET_INV.get(object_class)}_{field}.pkl"
+    file = f"data_YSE/formatted/{kern.PLASTICC_TARGET_INV.get(object_class)}_{field}.pkl"
 
     with open(file, "wb") as handle:
         pickle.dump(lcs, handle)
@@ -662,11 +662,7 @@ def extract_rainbow(lcs, object_class, split, database):
         data=all_param,
     )
 
-
-    if database == 'elasticc':
-        features.to_parquet(f"data_elasticc/features/rainbow/{object_class}/features_{object_class}_{split}.parquet")
-    elif (database == 'plasticc') or (database == 'YSE'):
-        features.to_parquet(f"data_plasticc/features/rainbow/{object_class}/features_{object_class}_{split}.parquet")
+    features.to_parquet(f"data_{database}/features/rainbow/{object_class}/features_{object_class}_{split}.parquet")
 
 
 def extract_bazin(lcs, object_class, split, database):
@@ -715,18 +711,10 @@ def extract_bazin(lcs, object_class, split, database):
     ]
 
     features = pd.DataFrame(columns=flat_name_param, data=all_param)
-
-    if database == 'elasticc':
-        features.to_parquet(
-            f"data_elasticc/features/bazin/{object_class}/features_{object_class}_{split}.parquet"
-        )
-    elif (database == 'plasticc') or (database == 'YSE'):
-        features.to_parquet(
-            f"data_plasticc/features/bazin/{object_class}/features_{object_class}_{split}.parquet"
-        )
+    features.to_parquet(f"data_{database}/features/bazin/{object_class}/features_{object_class}_{split}.parquet")
 
         
-def train_test_cutting_generator(prepro, perband=False):
+def train_test_cutting_generator(prepro, perband=False, bands = ['g ', 'r ', 'i '], mdpb=kern.min_det_per_band):
     """
     Remove random windows of detected points.
     Use removed points to create testing dataset.
@@ -737,13 +725,16 @@ def train_test_cutting_generator(prepro, perband=False):
     ----------
     prepro: list
         List of astropy table lightcurves
+    bands: list
+        Name of the passbands used in the dataset
+        Default is ['g ', 'r ', 'i ']
     
     Yields
     ------
     train, test
         astropy table, astropy table
     """
-        
+    
     for obj in prepro:
         
         all_bands_train, all_bands_test = [], []
@@ -751,7 +742,7 @@ def train_test_cutting_generator(prepro, perband=False):
         if perband:
             
             invalid_band = False
-            for band in ['g ', 'r ', 'i ']:
+            for band in bands:
 
                 if invalid_band:
                     continue
@@ -777,7 +768,7 @@ def train_test_cutting_generator(prepro, perband=False):
                         ((sub_obj['MJD']>=bins[chosen[1]]) &\
                          (sub_obj['MJD']<bins[chosen[1] + 1])))
 
-                if (~mask).sum() < kern.min_det_per_band.get(band):
+                if (~mask).sum() < mdpb.get(band):
                     invalid_band = True
                     continue
 
@@ -792,8 +783,12 @@ def train_test_cutting_generator(prepro, perband=False):
 
         else:
 
+            mask = [True] * len(obj)
+            for band in bands:
+                mask = mask | (obj['BAND'] == band)
             
-            sub_obj = obj[(obj['BAND'] == 'g ') | (obj['BAND'] == 'r ') | (obj['BAND'] == 'i ')]
+            sub_obj = obj[mask]
+            
             bins = np.arange(sub_obj['MJD'].min(), sub_obj['MJD'].max(), kern.point_cut_window)
 
             valid = []
@@ -814,15 +809,20 @@ def train_test_cutting_generator(prepro, perband=False):
                     ((sub_obj['MJD']>=bins[chosen[1]]) &\
                      (sub_obj['MJD']<bins[chosen[1] + 1])))
             
-            for band in ['g ', 'r ', 'i ']:
+            invalid_band = False
+            for band in bands:
                 pointperband = len(sub_obj[(~mask) & (sub_obj['BAND'] == band)])
-                if pointperband < kern.min_det_per_band.get(band):
-                    continue
+                
+                if pointperband < mdpb.get(band):
+                    invalid_band = True
+                    
+            if invalid_band:
+                continue
                     
             yield sub_obj[~mask], sub_obj[mask]
         
         
-def train_test_rising_cutting_generator(prepro):
+def train_test_rising_cutting_generator(prepro, bands = ['g ', 'r ', 'i '], mdpb=kern.min_det_per_band):
     """
     Choose a random point during rising phase, remove all points after this.
     Use removed points to create testing dataset.
@@ -833,6 +833,9 @@ def train_test_rising_cutting_generator(prepro):
     ----------
     prepro: list
         List of astropy table lightcurves
+    bands: list
+        Name of the passbands used in the dataset
+        Default is ['g ', 'r ', 'i ']
     
     Yields
     ------
@@ -847,7 +850,7 @@ def train_test_rising_cutting_generator(prepro):
         maxi = obj.meta['true_peakmjd']
         threshold = random.uniform(mini, maxi)
             
-        for band in ['g ', 'r ', 'i ']:
+        for band in bands:
 
             if invalid_band:
                 continue
@@ -855,7 +858,7 @@ def train_test_rising_cutting_generator(prepro):
             sub_obj = obj[obj['BAND'] == band]
             mask = sub_obj['MJD'] > threshold
 
-            if ((~mask).sum() < kern.min_det_per_band.get(band)) |\
+            if ((~mask).sum() < mdpb.get(band)) |\
                ((mask).sum() < 1):
                 invalid_band = True
                 continue
@@ -967,7 +970,7 @@ def feature_extract_target(object_class, fex_function, cores, database, field=''
     start_time = time.time()
 
     if not os.path.exists(f"data_{database}/features/"):
-            os.mkdir(f"data_plasticc/features/")
+            os.mkdir(f"data_{database}/features/")
     
     if not os.path.exists(f"data_{database}/features/{fex_function}/"):
             os.mkdir(f"data_{database}/features/{fex_function}/")
@@ -1087,14 +1090,19 @@ def train_test_bins_target(object_class, database, field=''):
         'ddf' or 'wfd' (always 'wfd' for YSE)
     """
     
-    
+    bands = ['g ', 'r ', 'i ']
+    mdpb = kern.min_det_per_band
+
+    if database == 'YSE':
+        mdpb = kern.min_det_per_band_YSE
+        bands = ['g ', 'r ', 'PSg', 'PSr', 'PSi']
 
     path = f'data_{database}/formatted/'
 
     with open(f'{path}{object_class}_{field}.pkl', "rb") as handle:
         formatted = pickle.load(handle)
         
-    generator = train_test_cutting_generator(formatted)
+    generator = train_test_cutting_generator(formatted, bands=bands, mdpb=mdpb)
     train_test = list(generator)
 
     with open(f'{path}{object_class}_train_w{kern.point_cut_window}_{field}.pkl', "wb") as handle:
@@ -1121,12 +1129,19 @@ def train_test_rising_target(object_class, database, field=''):
         'ddf' or 'wfd' (always 'wfd' for YSE)
     """
     
+    bands = ['g ', 'r ', 'i ']
+    mdpb = kern.min_det_per_band
+    
+    if database == 'YSE':
+        mdpb = kern.min_det_per_band_YSE
+        bands = ['g ', 'r ', 'PSg', 'PSr', 'PSi']
+        
     path = f'data_{database}/formatted/'
 
     with open(f'{path}{object_class}_{field}.pkl', "rb") as handle:
         formatted = pickle.load(handle)
         
-    generator = train_test_rising_cutting_generator(formatted)
+    generator = train_test_rising_cutting_generator(formatted, bands=bands, mdpb=mdpb)
     train_test = list(generator)
 
     with open(f'{path}{object_class}_train_rising_{field}.pkl', "wb") as handle:
@@ -1181,6 +1196,10 @@ if __name__ == "__main__":
     database = args.database
     field = args.field
     
+    fex_functions = ['rainbow']
+    if database != 'YSE':
+        fex_functions += ['bazin']
+    
     # PROCESS TO A COMPLETE FEATURE EXTRACTION :
     
     # Format original data
@@ -1205,7 +1224,7 @@ if __name__ == "__main__":
     preprocess_target(rising_class, database, field)
     print(f'{rising_class} preprocessed')
 
-    for fex_function in ['bazin', 'rainbow']:
+    for fex_function in fex_functions:
         
         # Feature extract the 3 preprocessed database
         feature_extract_target(object_class, fex_function, cores, database, field)

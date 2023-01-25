@@ -72,4 +72,39 @@ def zoom_in(df, zoom, parameters):
     mask = (df.index).isin(to_exclude)
 
     return ~mask
+
+
+class Standard_plot():
     
+    yellow_snad = '#fcbd43'
+    dark_snad = '#22114c'
+
+    def __init__(self, n=1, m=1):
+        self.title_size = 20
+        self.figure_size = (16, 10)
+        self.xylabel_size = 18
+        self.legend_size = 16
+        self.marker_size = 100
+        self.err_marker_size = 13
+        self.line_size = 6
+        self.err_line_size = 3
+        self.axis_size = 2
+        self.tick_size = 14
+        self.loc = 'upper right'
+        self.n, self.m = n, m
+    
+    def create_fig(self):
+        # change all spines
+        
+        fig, ax1 = plt.subplots(self.n, self.m, figsize=self.figure_size)
+        
+        for axis in ['top','bottom','left','right']:
+            ax1.spines[axis].set_linewidth(self.axis_size)
+
+        # increase tick width
+        ax1.tick_params(width=self.axis_size)
+        
+    def end_fig(self):
+        plt.yticks(fontsize=self.tick_size)
+        plt.xticks(fontsize=self.tick_size)
+        plt.legend(fontsize = self.legend_size, loc=self.loc)

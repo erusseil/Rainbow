@@ -17,16 +17,9 @@ if __name__ == "__main__":
     elif str_extract == "rainbow":
         f_extract = dp.extract_rainbow
 
-    if database == 'elasticc':
-        # DATA
-        with open(f"data_elasticc/preprocessed/{object_class}.pkl", "rb") as handle:
-            data = pickle.load(handle)
-            
-    elif (database == 'plasticc') or (database == 'YSE'):
-        # DATA
-        with open(f"data_plasticc/preprocessed/{object_class}.pkl", "rb") as handle:
-            data = pickle.load(handle)
-
+    with open(f"data_{database}/preprocessed/{object_class}.pkl", "rb") as handle:
+        data = pickle.load(handle)
+        
     # DIVIDE DATA INTO SMALL SAMPLES
 
     nb_split = len(data) // total_div

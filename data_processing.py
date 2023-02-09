@@ -234,6 +234,9 @@ def format_elasticc(object_class, max_n):
     lcs : list
         list of astropy tables. Each table is one light curve.
     """
+    
+    if kern.global_seed != None:
+        random.seed(kern.global_seed)
 
     heads = sorted(glob.glob(f"{kern.ELASTiCC_path}{object_class}/*_HEAD.FITS.gz"))
     phots = sorted(glob.glob(f"{kern.ELASTiCC_path}{object_class}/*_PHOT.FITS.gz"))
@@ -249,7 +252,7 @@ def format_elasticc(object_class, max_n):
             lcs += list(parse_fits_snana(head, phot, min_det_per_band=min_det_per_band))
 
     n_objects = int(np.where(max_n<=len(lcs), max_n, len(lcs)))
-    lcs = random.sample(lcs, n_objects)
+    lcs = random.sample(lcs, n_objects, )
 
     # Save preprocessed data as pkl for later use
     if not os.path.exists("data_elasticc"):
@@ -735,6 +738,9 @@ def train_test_cutting_generator(prepro, perband=False, bands = ['g ', 'r ', 'i 
         astropy table, astropy table
     """
     
+    if kern.global_seed != None:
+        random.seed(kern.global_seed)
+    
     for obj in prepro:
         
         all_bands_train, all_bands_test = [], []
@@ -842,6 +848,9 @@ def train_test_rising_cutting_generator(prepro, bands = ['g ', 'r ', 'i '], mdpb
     train, test
         astropy table, astropy table
     """
+    if kern.global_seed != None:
+        random.seed(kern.global_seed)
+        
     for obj in prepro:
         invalid_band = False
         all_bands_train, all_bands_test = [], []

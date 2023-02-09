@@ -21,3 +21,5 @@ PLASTICC_TARGET_INV = {90: 'Ia', 42: 'II', 62: 'Ibc', 95: 'SLSN', 64: 'KN', 15:'
 PASSBANDS = np.array(['u ', 'g ', 'r ', 'i ', 'z ', 'Y ', 'PSg', 'PSr', 'PSi'])
 
 point_cut_window = 5
+
+global_seed = 42

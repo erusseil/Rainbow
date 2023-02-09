@@ -4,6 +4,10 @@ from sklearn.metrics import confusion_matrix
 import numpy as np
 import pandas as pd
 
+
+band_dict = {0:'g ', 1:'r ', 2:'i '}
+
+
 def draw_confusion(clf, X_test, y_test, interest, percent=False):
     
     classe_names = np.unique(y_test)
@@ -92,19 +96,30 @@ class Standard_plot():
         self.tick_size = 14
         self.loc = 'upper right'
         self.n, self.m = n, m
+        self.fig, self.axes = None, None
     
     def create_fig(self):
         # change all spines
         
-        fig, ax1 = plt.subplots(self.n, self.m, figsize=self.figure_size)
+        self.fig, self.axes = plt.subplots(self.n, self.m, figsize=self.figure_size)
+        
+        if (self.n==1) & (self.m==1):
+            self.axes = [self.axes]
         
         for axis in ['top','bottom','left','right']:
-            ax1.spines[axis].set_linewidth(self.axis_size)
+            for ax in self.axes:
+                ax.spines[axis].set_linewidth(self.axis_size)
 
         # increase tick width
-        ax1.tick_params(width=self.axis_size)
+        for ax in self.axes:
+            ax.tick_params(width=self.axis_size)
         
-    def end_fig(self):
-        plt.yticks(fontsize=self.tick_size)
-        plt.xticks(fontsize=self.tick_size)
-        plt.legend(fontsize = self.legend_size, loc=self.loc)
+    def end_fig(self, idx=-1):
+        
+        if idx==-1:
+            plt.yticks(fontsize=self.tick_size)
+            plt.xticks(fontsize=self.tick_size)
+            plt.legend(fontsize = self.legend_size, loc=self.loc)
+        else:
+            self.axes[idx].tick_params(size=self.tick_size)
+            self.axes[idx].legend(fontsize = self.legend_size, loc=self.loc)

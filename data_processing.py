@@ -3,8 +3,10 @@ from pathlib import Path
 from argparse import ArgumentParser
 import glob
 from itertools import chain
+from functools import lru_cache
 from astropy.table import vstack, Table
 import astropy.constants as c
+import astropy.units as u
 import os
 import sys
 import pickle
@@ -19,6 +21,8 @@ import kernel as kern
 import time
 import shutil
 import random
+from scipy.interpolate import UnivariateSpline
+from scipy.integrate import simpson
 
 
 def Am_to_Hz(wl):
@@ -441,14 +445,14 @@ def Tsig(t, Tmin, dT, ksig, t0):
     return Tmin + dT / (1 + np.exp((t - t0) / ksig))
 
 
-def plank(nu, T):
+def planck_nu(nu, T):
     """
-    Compute spectral radiance from temperature and frequency.
+    Compute blackbody intensity from temperature and frequency.
 
     Parameters
     ----------
     nu: array
-        Frequency for which to compute spectral radiance.
+        Frequency for which to compute intensity.
     T: array
         Temperature values at different times.
 
@@ -458,6 +462,94 @@ def plank(nu, T):
     """
 
     return (2 * c.h.value / c.c.value**2) * nu**3 / np.expm1(c.h.value * nu / (c.k_B.value * T))
+
+
+@lru_cache(maxsize=64)
+def planck_passband_spline(passband, T_min=1e2, T_max=1e6, T_steps=10_000):
+    """
+    Compute spline of passband intensity for the range of temperatures.
+
+    Parameters
+    ----------
+    passband: string
+        Name of the passband
+    T_min: float
+        Minimum temperature to consider
+    T_max: float
+        Maximum temperature to consider
+    T_steps: int
+        Step between temperatures to consider
+
+    Returns
+    -------
+    scipy.iterpolate.UnivariateSpline
+        Spline of the passband intensity versus temperature
+    """
+    passband = sncosmo.get_bandpass(passband)
+    nu = (c.c / (passband.wave * u.AA)).to_value(u.Hz)
+    trans = passband.trans  # photon counter transmission
+
+    T = np.logspace(np.log10(T_min), np.log10(T_max), T_steps)
+    black_body_integral = simpson(x=nu, y=planck_nu(nu, T[:, None]) * trans / nu, axis=-1)
+    transmission_integral = simpson(x=nu, y=trans / nu)
+
+    return UnivariateSpline(x=T, y=black_body_integral / transmission_integral, s=0, k=3, ext='raise')
+
+
+def planck_passband(passband, T):
+    """
+    Compute spectral radiance from temperature and passband.
+
+    Parameters
+    ----------
+    passband: array of strings
+        Names of passband for which to compute intensity.
+    T: array of floats
+        Temperature values at different times.
+
+    Returns:
+    --------
+    array of floats
+        Computed intensity.
+    """
+    passband, T = np.broadcast_arrays(passband, T)
+
+    # Speed up computation if only a single value is passed
+    if passband.size == 1:
+        return planck_passband_spline(passband.item())(T)
+
+    unique_passbandes, indices = np.unique(passband, return_inverse=True)
+    output = np.zeros_like(passband, dtype=float)
+    for index, passband in enumerate(unique_passbandes):
+        T_passband = T[indices == index]
+        spline = planck_passband_spline(passband)
+        output[indices == index] = spline(T_passband)
+
+    return output
+
+
+def planck(nu, T):
+    """
+    Compute intensity from temperature and frequency / passband.
+
+    Parameters
+    ----------
+    nu: array of floats or strings
+        Frequencies or passband names for which to compute intensity.
+    T: array of floats
+        Temperature values at different times.
+
+    Returns:
+    --------
+    array of floats
+        Computed intensity.
+    """
+    nu = np.asarray(nu)
+    if np.issubdtype(nu.dtype, np.number):
+        return planck_nu(nu, T)
+    elif np.issubdtype(nu.dtype, np.string):
+        return planck_passband(nu, T)
+    raise ValueError(f'Invalid type for nu: {nu.dtype}')
 
 
 # Flux of lightcurves at any time at any frequency
@@ -496,7 +588,7 @@ def Fnu(x, a, t0, tfall, trise, Tmin, dT, ksig):
     Fbol = Fbaz(t, a, t0, tfall, trise)
     amplitude = 1e15
 
-    return np.pi / c.sigma_sb.value * Fbol * plank(nu, T) / T**4 * amplitude
+    return np.pi / c.sigma_sb.value * Fbol * planck(nu, T) / T**4 * amplitude
 
 
 def perform_fit_rainbow(obj):

@@ -164,7 +164,7 @@ def plasticc_reddening_correction(lc):
     for band, red in enumerate([red_u, red_g, red_r, red_i, red_z, red_Y]):
 
         A = red * mwebv
-        correction = 10**(-A/2.5)
+        correction = 10**(A/2.5)
         
         lc['FLUXCAL'][lc['passband']==band] = lc['FLUXCAL'][lc['passband']==band] * correction
         lc['FLUXCALERR'][lc['passband']==band] = lc['FLUXCALERR'][lc['passband']==band] * correction

@@ -43,7 +43,8 @@ def Am_to_Hz(wl):
 
 def generate_plasticc_lcs(object_class, field):
     """
-    PLAsTiCC lightcurve generator to the correct format
+    PLAsTiCC lightcurve generator to the correct format.
+    Apply MWEBV correction to flux and fluxerr
     
     Parameters
     ----------
@@ -145,10 +146,33 @@ def generate_plasticc_YSE(object_class):
             continue
 
         yield table
+        
+
+def plasticc_reddening_correction(lc):
+    """
+    Correction the flux/fluxerr from the Milky Way 
+    reddening using mwebv from plasticc
+    
+    Parameters
+    ----------
+    lc: astropy.Table
+        Light curve
+    """
+    
+    mwebv = lc.meta['mwebv']
+    
+    for band, red in enumerate([red_u, red_g, red_r, red_i, red_z, red_Y]):
+
+        A = red * mwebv
+        correction = 10**(-A/2.5)
+        
+        lc['FLUXCAL'][lc['passband']==band] = lc['FLUXCAL'][lc['passband']==band] * correction
+        lc['FLUXCALERR'][lc['passband']==band] = lc['FLUXCALERR'][lc['passband']==band] * correction
+
 
 def format_plasticc(object_class, max_n, field):
     """
-    Use plasticc generator, normalize and aggregate
+    Use plasticc generator and aggregate
     the light curves
     
     Parameters
@@ -168,6 +192,7 @@ def format_plasticc(object_class, max_n, field):
         
     lcs = []
     for idx, lc in zip(range(max_n), generate_plasticc_lcs(object_class, field)):
+        plasticc_reddening_correction(lc)
         lcs.append(lc)
         
     # Save preprocessed data as pkl for later use
@@ -185,7 +210,7 @@ def format_plasticc(object_class, max_n, field):
 
 def format_YSE(object_class, max_n, field):
     """
-    Use YSE generator, normalize and aggregate
+    Use YSE generator and aggregate
     the light curves
     
     Parameters
@@ -1266,6 +1291,14 @@ nu_Y = Am_to_Hz(9711)
 nu_PSg = Am_to_Hz(4811)
 nu_PSr = Am_to_Hz(6156)
 nu_PSi = Am_to_Hz(7504)
+
+# F99 Reddening with Rv=3.1 as given in Table 6 of : https://iopscience.iop.org/article/10.1088/0004-637X/737/2/103/pdf
+red_u = 4.145
+red_g = 3.237
+red_r = 2.273
+red_i = 1.684
+red_z = 1.323
+red_Y = 1.088
 
 freq_dic = {"u ": nu_u, "g ": nu_g, "r ": nu_r, "i ": nu_i, "z ": nu_z, "Y ": nu_Y, "PSg": nu_PSg, "PSr": nu_PSr, "PSi": nu_PSi}
 

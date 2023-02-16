@@ -105,6 +105,8 @@ class Standard_plot():
         
         if (self.n==1) & (self.m==1):
             self.axes = [self.axes]
+        if (self.n!=1) & (self.m!=1):
+            self.axes = self.axes.flatten()
         
         for axis in ['top','bottom','left','right']:
             for ax in self.axes:

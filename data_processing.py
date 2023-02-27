@@ -911,12 +911,12 @@ def train_test_cutting_generator(prepro, perband=False, bands = ['g ', 'r ', 'i 
 
         else:
 
-            mask = [True] * len(obj)
+            mask = [False] * len(obj)
             for band in bands:
                 mask = mask | (obj['BAND'] == band)
-            
+
             sub_obj = obj[mask]
-            
+
             bins = np.arange(sub_obj['MJD'].min(), sub_obj['MJD'].max(), kern.point_cut_window)
 
             valid = []
@@ -1435,9 +1435,11 @@ if __name__ == "__main__":
     
     # PROCESS TO A COMPLETE FEATURE EXTRACTION :
 
+    '''
     # Format original data
     format_target(object_class, n_max, database, field, red_correction=red)
     print(f'{object_class} formatted')
+    '''
     
     # Preprocess entire light curves
     preprocess_target(object_class, database, field, red_correction=red)

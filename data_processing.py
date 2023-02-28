@@ -343,16 +343,16 @@ def normalize(lc):
     -------
     lc : astropy table
         Normalized light curve with :
-        - Fluxes divided by max g band flux
-        - Time 0 shifted by time of max g band flux
+        - Fluxes divided by max r band flux
+        - Time 0 shifted by time of max r band flux
         - Added columns before normalization : max_flux, max_flux_time
     """
 
-    gband = lc[lc["BAND"] == "g "]
-    maxi = gband["FLUXCAL"].max()
+    normband = lc[lc["BAND"] == "r "]
+    maxi = normband["FLUXCAL"].max()
 
     lc["max_flux"] = maxi
-    t_maxi = gband["MJD"][gband["FLUXCAL"].argmax()]
+    t_maxi = normband["MJD"][normband["FLUXCAL"].argmax()]
     lc["max_flux_time"] = t_maxi
     lc["FLUXCAL"] = lc["FLUXCAL"] / maxi
     lc["FLUXCALERR"] = lc["FLUXCALERR"] / maxi

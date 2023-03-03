@@ -148,29 +148,7 @@ def generate_plasticc_YSE(object_class):
         yield table
         
 
-def plasticc_reddening_correction(lc):
-    """
-    Correction the flux/fluxerr from the Milky Way 
-    reddening using mwebv from plasticc
-    
-    Parameters
-    ----------
-    lc: astropy.Table
-        Light curve
-    """
-    
-    mwebv = lc.meta['mwebv']
-    
-    for band, red in enumerate([red_u, red_g, red_r, red_i, red_z, red_Y]):
-
-        A = red * mwebv
-        correction = 10**(A/2.5)
-        
-        lc['FLUXCAL'][lc['passband']==band] = lc['FLUXCAL'][lc['passband']==band] * correction
-        lc['FLUXCALERR'][lc['passband']==band] = lc['FLUXCALERR'][lc['passband']==band] * correction
-
-
-def format_plasticc(object_class, max_n, field, red_correction=''):
+def format_plasticc(object_class, max_n, field):
     """
     Use plasticc generator and aggregate
     the light curves
@@ -183,10 +161,6 @@ def format_plasticc(object_class, max_n, field, red_correction=''):
         Maximum number of light curves to aggregate.
     field: str
         LSST cadence to use : 'wfd' or 'ddf'
-    red_correction: str
-        Correct for the milky way extinction.
-        Don't if empty, do and use str in files name if not.
-        Default is ''
         
     Returns
     -------
@@ -196,8 +170,6 @@ def format_plasticc(object_class, max_n, field, red_correction=''):
         
     lcs = []
     for idx, lc in zip(range(max_n), generate_plasticc_lcs(object_class, field)):
-        if red_correction!='':
-            plasticc_reddening_correction(lc)
         lcs.append(lc)
         
     # Save preprocessed data as pkl for later use
@@ -207,7 +179,7 @@ def format_plasticc(object_class, max_n, field, red_correction=''):
     if not os.path.exists("data_plasticc/formatted"):
         os.mkdir("data_plasticc/formatted")
         
-    file = f"data_plasticc/formatted/{kern.PLASTICC_TARGET_INV.get(object_class)}_{field}{red_correction}.pkl"
+    file = f"data_plasticc/formatted/{kern.PLASTICC_TARGET_INV.get(object_class)}_{field}.pkl"
 
     with open(file, "wb") as handle:
         pickle.dump(lcs, handle)
@@ -301,9 +273,9 @@ def format_elasticc(object_class, max_n):
         pickle.dump(lcs, handle)
 
 
-def preprocess(dataset, object_class, field='', red_correction=''):
+def preprocess(dataset, object_class, field=''):
 
-    path_to_use = kern.main_path + f'/data_{dataset}/formatted/{object_class}_{field}{red_correction}.pkl'
+    path_to_use = kern.main_path + f'/data_{dataset}/formatted/{object_class}_{field}.pkl'
                           
     with open(path_to_use, "rb") as handle:
         lcs = pickle.load(handle)
@@ -318,10 +290,10 @@ def preprocess(dataset, object_class, field='', red_correction=''):
         os.mkdir(f"data_{dataset}/preprocessed")
         
     if dataset == 'elasticc':
-        file = f"data_{dataset}/preprocessed/{object_class}{red_correction}"
+        file = f"data_{dataset}/preprocessed/{object_class}"
         
     else:
-        file = f"data_{dataset}/preprocessed/{object_class}_{field}{red_correction}"
+        file = f"data_{dataset}/preprocessed/{object_class}_{field}"
 
     with open(f'{file}.pkl' , "wb") as handle:
         pickle.dump(lcs, handle)
@@ -379,7 +351,7 @@ def parse_fits_snana(
 
     min_det_per_band: dict
         Dict of filter names along with the minimum
-        number of point requiered for each filter
+        number of point required for each filter
 
     Returns
     -------
@@ -1091,7 +1063,7 @@ def check_inputs(database, field):
             os.mkdir(f"data_{database}/")
     
     
-def format_target(object_class, n_max, database, field='', red_correction=''):
+def format_target(object_class, n_max, database, field=''):
     """
     Format a given class to the correct data shape.
     Saves a pkl file
@@ -1108,10 +1080,6 @@ def format_target(object_class, n_max, database, field='', red_correction=''):
     field: str
         In the case of plasticc and YSE.
         'ddf' or 'wfd' (always 'wfd' for YSE)
-    red_correction: str
-        Correct for the milky way extinction.
-        Don't if empty, do and use str in files name if not.
-        Default is '
     """
     
     check_inputs(database, field)
@@ -1122,13 +1090,13 @@ def format_target(object_class, n_max, database, field='', red_correction=''):
     elif (database == 'plasticc') or (database == 'YSE'):
         
         if database == 'plasticc':
-            format_plasticc(kern.PLASTICC_TARGET.get(object_class), n_max, field, red_correction=red_correction)
+            format_plasticc(kern.PLASTICC_TARGET.get(object_class), n_max, field)
 
         if database == 'YSE':
             format_YSE(kern.PLASTICC_TARGET.get(object_class), n_max, field)
             
 
-def preprocess_target(object_class, database, field='', red_correction=''):
+def preprocess_target(object_class, database, field=''):
     """
     Preprocess a given class from a formated pkl file.
     Saves a pkl file
@@ -1142,17 +1110,13 @@ def preprocess_target(object_class, database, field='', red_correction=''):
     field: str
         In the case of plasticc and YSE.
         'ddf' or 'wfd' (always 'wfd' for YSE)
-    red_correction: str
-        Correct for the milky way extinction.
-        Don't if empty, do and use str in files name if not.
-        Default is '
     """
         
     check_inputs(database, field)
-    preprocess(database, object_class, field, red_correction=red_correction)
+    preprocess(database, object_class, field)
         
 
-def feature_extract_target(object_class, fex_function, cores, database, field='', red_correction=''):
+def feature_extract_target(object_class, fex_function, cores, database, field=''):
     """
     Extract features of a given class from a preprocessed pkl file.
     Saves a parquet file
@@ -1169,10 +1133,6 @@ def feature_extract_target(object_class, fex_function, cores, database, field=''
     field: str
         In the case of plasticc and YSE.
         'ddf' or 'wfd' (always 'wfd' for YSE)
-    red_correction: str
-        Correct for the milky way extinction.
-        Don't if empty, do and use str in files name if not.
-        Default is '
     """
 
     start_time = time.time()
@@ -1203,14 +1163,14 @@ def feature_extract_target(object_class, fex_function, cores, database, field=''
         
     if (database == 'plasticc') or (database == 'YSE'):
 
-        if not os.path.exists(f"data_{database}/features/{fex_function}/{object_class}_{field}{red_correction}"):
-            os.mkdir(f"data_{database}/features/{fex_function}/{object_class}_{field}{red_correction}")
+        if not os.path.exists(f"data_{database}/features/{fex_function}/{object_class}_{field}"):
+            os.mkdir(f"data_{database}/features/{fex_function}/{object_class}_{field}")
             
         subprocess.call(
-            shlex.split(f"sh feature_extraction.sh {cores} {object_class}_{field}{red_correction} {fex_function} {database}")
+            shlex.split(f"sh feature_extraction.sh {cores} {object_class}_{field} {fex_function} {database}")
         )
 
-        temp_path = f"data_{database}/features/{fex_function}/{object_class}_{field}{red_correction}/"
+        temp_path = f"data_{database}/features/{fex_function}/{object_class}_{field}/"
         
         
     n_computed_files = len(
@@ -1265,13 +1225,13 @@ def feature_extract_target(object_class, fex_function, cores, database, field=''
 
     elif (database == 'plasticc') or (database == 'YSE'):
         
-        features.to_parquet(f"data_{database}/features/{fex_function}/{object_class}_{field}{red_correction}_features.parquet")
+        features.to_parquet(f"data_{database}/features/{fex_function}/{object_class}_{field}_features.parquet")
 
-        with open(f"data_{database}/features/{fex_function}/{object_class}_{field}{red_correction}_info.txt", "w") as f:
+        with open(f"data_{database}/features/{fex_function}/{object_class}_{field}_info.txt", "w") as f:
             f.write(f"Feature extraction took {total_time} sec, over {cores} cores")
             f.write("\n")
             f.write(
-                f'The features table take {os.path.getsize(f"data_{database}/features/{fex_function}/{object_class}_{field}{red_correction}_features.parquet")} bytes of space'
+                f'The features table take {os.path.getsize(f"data_{database}/features/{fex_function}/{object_class}_{field}_features.parquet")} bytes of space'
             )
             f.write("\n")
             f.write((features.head()).to_string())
@@ -1281,7 +1241,7 @@ def feature_extract_target(object_class, fex_function, cores, database, field=''
         print(f"{object_class}_{field} features have been computed succesfully")
         
         
-def train_test_bins_target(object_class, database, field='', red_correction=''):
+def train_test_bins_target(object_class, database, field=''):
     """
     Cut data into a train and a test sample
     using the random bins removal method
@@ -1296,10 +1256,6 @@ def train_test_bins_target(object_class, database, field='', red_correction=''):
     field: str
         In the case of plasticc and YSE.
         'ddf' or 'wfd' (always 'wfd' for YSE)
-    red_correction: str
-        Correct for the milky way extinction.
-        Don't if empty, do and use str in files name if not.
-        Default is '
     """
     
     bands = ['g ', 'r ', 'i ']
@@ -1311,20 +1267,20 @@ def train_test_bins_target(object_class, database, field='', red_correction=''):
 
     path = f'data_{database}/formatted/'
 
-    with open(f'{path}{object_class}_{field}{red_correction}.pkl', "rb") as handle:
+    with open(f'{path}{object_class}_{field}.pkl', "rb") as handle:
         formatted = pickle.load(handle)
         
     generator = train_test_cutting_generator(formatted, bands=bands, mdpb=mdpb)
     train_test = list(generator)
 
-    with open(f'{path}{object_class}_train_w{kern.point_cut_window}_{field}{red_correction}.pkl', "wb") as handle:
+    with open(f'{path}{object_class}_train_w{kern.point_cut_window}_{field}.pkl', "wb") as handle:
         pickle.dump([x[0] for x in train_test], handle)
         
-    with open(f'{path}{object_class}_test_w{kern.point_cut_window}_{field}{red_correction}.pkl', "wb") as handle:
+    with open(f'{path}{object_class}_test_w{kern.point_cut_window}_{field}.pkl', "wb") as handle:
         pickle.dump([x[1] for x in train_test], handle)
         
     
-def train_test_rising_target(object_class, database, field='', red_correction=''):
+def train_test_rising_target(object_class, database, field=''):
     """
     Cut data into a train and a test sample
     using the after rising removal method
@@ -1339,10 +1295,6 @@ def train_test_rising_target(object_class, database, field='', red_correction=''
     field: str
         In the case of plasticc and YSE.
         'ddf' or 'wfd' (always 'wfd' for YSE)
-    red_correction: str
-        Correct for the milky way extinction.
-        Don't if empty, do and use str in files name if not.
-        Default is '
     """
     
     bands = ['g ', 'r ', 'i ']
@@ -1354,16 +1306,16 @@ def train_test_rising_target(object_class, database, field='', red_correction=''
         
     path = f'data_{database}/formatted/'
 
-    with open(f'{path}{object_class}_{field}{red_correction}.pkl', "rb") as handle:
+    with open(f'{path}{object_class}_{field}.pkl', "rb") as handle:
         formatted = pickle.load(handle)
         
     generator = train_test_rising_cutting_generator(formatted, bands=bands, mdpb=mdpb)
     train_test = list(generator)
 
-    with open(f'{path}{object_class}_train_rising_{field}{red_correction}.pkl', "wb") as handle:
+    with open(f'{path}{object_class}_train_rising_{field}.pkl', "wb") as handle:
         pickle.dump([x[0] for x in train_test], handle)
         
-    with open(f'{path}{object_class}_test_rising_{field}{red_correction}.pkl', "wb") as handle:
+    with open(f'{path}{object_class}_test_rising_{field}.pkl', "wb") as handle:
         pickle.dump([x[1] for x in train_test], handle)
         
         
@@ -1381,14 +1333,6 @@ nu_Y = Am_to_Hz(9711)
 nu_PSg = Am_to_Hz(4811)
 nu_PSr = Am_to_Hz(6156)
 nu_PSi = Am_to_Hz(7504)
-
-# F99 Reddening with Rv=3.1 as given in Table 6 of : https://iopscience.iop.org/article/10.1088/0004-637X/737/2/103/pdf
-red_u = 4.145
-red_g = 3.237
-red_r = 2.273
-red_i = 1.684
-red_z = 1.323
-red_Y = 1.088
 
 freq_dic = {"u ": nu_u, "g ": nu_g, "r ": nu_r, "i ": nu_i, "z ": nu_z, "Y ": nu_Y, "PSg": nu_PSg, "PSr": nu_PSr, "PSi": nu_PSi}
 
@@ -1411,7 +1355,6 @@ if __name__ == "__main__":
     arg_parser.add_argument('--cores', default=1, help='Number of cores to use')
     arg_parser.add_argument('--database', required=True, help='plasticc or elasticc')
     arg_parser.add_argument('--field', default='ddf', help='for plasticc : ddf, wfd or all')
-    arg_parser.add_argument('--red', default='', type=str, help='Leave empty for no mwebv correction, otherwise give name for corrected files')
     
     args = arg_parser.parse_args()
 
@@ -1420,53 +1363,44 @@ if __name__ == "__main__":
     cores = args.cores
     database = args.database
     field = args.field
-    red = args.red
     
     fex_functions = ['rainbow']
     if database != 'YSE':
         fex_functions += ['bazin']
-        
-    if red != '':
-        red = '_' + red
 
-    if database != 'plasticc':
-        print('Can only correct for milky way extinction on the plasticc dataset')
-        red = ''
     
     # PROCESS TO A COMPLETE FEATURE EXTRACTION :
 
-    '''
     # Format original data
-    format_target(object_class, n_max, database, field, red_correction=red)
+    format_target(object_class, n_max, database, field)
     print(f'{object_class} formatted')
-    '''
     
     # Preprocess entire light curves
-    preprocess_target(object_class, database, field, red_correction=red)
+    preprocess_target(object_class, database, field)
     print(f'{object_class} preprocessed')
     
     # Remove bins of points and preprocess the training data
-    train_test_bins_target(object_class, database, field, red_correction=red)
+    train_test_bins_target(object_class, database, field)
     bin_class = object_class + f'_train_w{kern.point_cut_window}'
     print(f'{bin_class} created')
-    preprocess_target(bin_class, database, field, red_correction=red)
+    preprocess_target(bin_class, database, field)
     print(f'{bin_class} preprocessed')
 
     # Remove points after rising part and preprocess training data
-    train_test_rising_target(object_class, database, field, red_correction=red)
+    train_test_rising_target(object_class, database, field)
     rising_class = object_class + '_train_rising'
     print(f'{rising_class} created')
-    preprocess_target(rising_class, database, field, red_correction=red)
+    preprocess_target(rising_class, database, field)
     print(f'{rising_class} preprocessed')
 
     for fex_function in fex_functions:
         
         # Feature extract the 3 preprocessed database
-        feature_extract_target(object_class, fex_function, cores, database, field, red_correction=red)
+        feature_extract_target(object_class, fex_function, cores, database, field)
         print(f'{object_class} feature extracted with {fex_function}')
-        feature_extract_target(bin_class, fex_function, cores, database, field, red_correction=red)
+        feature_extract_target(bin_class, fex_function, cores, database, field)
         print(f'{bin_class} feature extracted with {fex_function}')
-        feature_extract_target(rising_class, fex_function, cores, database, field, red_correction=red)
+        feature_extract_target(rising_class, fex_function, cores, database, field)
         print(f'{rising_class} feature extracted with {fex_function}')
     
     print(f'{object_class} COMPLETED FEATURE EXTRACTED')

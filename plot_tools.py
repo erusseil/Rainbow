@@ -7,6 +7,8 @@ import pandas as pd
 
 band_dict = {0:'g ', 1:'r ', 2:'i '}
 
+markers_train = ["o", "X"]
+markers_test = ["D", "^"]
 
 def draw_confusion(clf, X_test, y_test, interest, percent=False):
     
@@ -82,10 +84,11 @@ class Standard_plot():
     
     yellow_snad = '#fcbd43'
     dark_snad = '#22114c'
+    third_color = '#C45C3F'
 
     def __init__(self, n=1, m=1):
         self.title_size = 20
-        self.figure_size = (16, 10)
+        self.figure_size = (10,6)
         self.xylabel_size = 18
         self.legend_size = 16
         self.marker_size = 100
@@ -116,12 +119,13 @@ class Standard_plot():
         for ax in self.axes:
             ax.tick_params(width=self.axis_size)
         
-    def end_fig(self, idx=-1):
+    def end_fig(self, idx=-1, legend=True):
         
         if idx==-1:
             plt.yticks(fontsize=self.tick_size)
             plt.xticks(fontsize=self.tick_size)
             plt.legend(fontsize = self.legend_size, loc=self.loc)
         else:
-            self.axes[idx].tick_params(size=self.tick_size)
-            self.axes[idx].legend(fontsize = self.legend_size, loc=self.loc)
+            self.axes[idx].tick_params(labelsize=self.tick_size)
+            if legend:
+                self.axes[idx].legend(fontsize = self.legend_size, loc=self.loc)

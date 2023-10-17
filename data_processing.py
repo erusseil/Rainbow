@@ -99,7 +99,7 @@ def generate_plasticc_lcs(object_class, field):
             
             yield table
 
-def generate_plasticc_YSE(object_class):
+def generate_plasticc_YSE(object_class, method):
     """
     YSE lightcurve generator to the correct format
     
@@ -107,21 +107,24 @@ def generate_plasticc_YSE(object_class):
     ----------
     object_class: str
         Name of the YSE class to compute
+    method : str
+        Specify the future method of feature extraction to be
+        used on the data. Impact the minimum number of point per band.
         
     Yields
     ------
     table : astropytable
         Formatted lightcurve table. Ensures that the minimum
         number of points from kernel.py is respected
+
     """
     
-    
-    meta = pd.read_csv(f'{kern.YSE_path}/YSE_plasticc_meta.csv', index_col='object_id')
+    meta = pd.read_csv(f'{kern.YSE_path}/YSE_baseline_plasticc_meta.csv', index_col='object_id')
     meta = meta[meta['true_target'] == object_class]
     
-    file_name = f'{kern.YSE_path}/YSE_plasticc_data.csv'
+    file_name = f'{kern.YSE_path}/YSE_baseline_plasticc_data.csv'
     df = pd.read_csv(file_name, index_col='object_id')
-    
+
     for object_id, table in df.groupby('object_id'):
         if object_id not in meta.index:
             continue
@@ -131,18 +134,29 @@ def generate_plasticc_YSE(object_class):
         table = Table.from_pandas(table)
         table.rename_columns(['mjd', 'flux', 'flux_err'], ['MJD', 'FLUXCAL', 'FLUXCALERR'])
 
+
         table.meta = meta.loc[object_id].to_dict()
         table.meta['SIM_PEAKMJD'] = table.meta['true_peakmjd']
         table.meta['SNID'] = object_id
 
-        detections = table[table['detected_bool'] == 1]
+        table2 = table.copy()
+        for col in ['BAND', 'passband']:
+            for band in ['g', 'r']:
+                table2[col][table2[col]==f'PS{band}'] = band + ' '
+
+        table2 = table2[table2['BAND']!= 'PSi']
+
+        if method == 'bazin':
+            table = table2
+
+        detections = table2[table2['detected_bool'] == 1]
         det_per_band = dict(zip(*np.unique(detections["BAND"], return_counts=True)))
-        
+
         if any(det_per_band.get(band, 0) < min_det for band, min_det in kern.min_det_per_band_YSE.items()):
             continue
 
-        if (table.meta['SIM_PEAKMJD'] < detections['MJD'][0]
-             or table.meta['SIM_PEAKMJD'] > detections['MJD'][-1]):
+        if (table2.meta['SIM_PEAKMJD'] < detections['MJD'][0]
+             or table2.meta['SIM_PEAKMJD'] > detections['MJD'][-1]):
             continue
 
         yield table
@@ -205,78 +219,74 @@ def format_YSE(object_class, max_n, field):
         List of preprocessed and formatted astropy tables.
     """
 
-    lcs = []
-    for idx, lc in zip(range(max_n), generate_plasticc_YSE(object_class)):
-        lcs.append(lc)
-
     # Save preprocessed data as pkl for later use
-    if not os.path.exists("data_plasticc"):
-        os.mkdir("data_plasticc")
+    if not os.path.exists("data_YSE"):
+        os.mkdir("data_YSE")
 
-    if not os.path.exists("data_plasticc/formatted"):
-        os.mkdir("data_plasticc/formatted")
+    if not os.path.exists("data_YSE/formatted"):
+        os.mkdir("data_YSE/formatted")
+            
+    lcs_rainbow, lcs_bazin = [], []
 
-    file = f"data_YSE/formatted/{kern.PLASTICC_TARGET_INV.get(object_class)}_{field}.pkl"
+    for idx, lc in zip(range(max_n), generate_plasticc_YSE(object_class, 'rainbow')):
+        lcs_rainbow.append(lc)
 
-    with open(file, "wb") as handle:
-        pickle.dump(lcs, handle)
+    for idx, lc in zip(range(max_n), generate_plasticc_YSE(object_class, 'bazin')):
+        lcs_bazin.append(lc)
+
+    for fraction in kern.YSE_fractions:
+
+        sub_lcs_rainbow, sub_lcs_bazin  = [], []
+        
+        for idx in range(len(lcs_rainbow)):
+            table_rainbow, table_bazin = lcs_rainbow[idx], lcs_bazin[idx]
+            sub_table_rainbow, sub_table_bazin = table_rainbow[4:], table_bazin[4:],
+
+            row_index = np.sort(np.random.choice(sub_table_rainbow['Unnamed: 0'], size = round(len(sub_table_rainbow) * fraction), replace=False))
+
+            mask_rainbow = [True]*4 + [i in row_index for i in sub_table_rainbow['Unnamed: 0']]
+            mask_bazin = [True]*4 + [i in row_index for i in sub_table_bazin['Unnamed: 0']]
+
+            detections = table_bazin[mask_bazin][table_bazin[mask_bazin]['detected_bool'] == 1]
+            det_per_band = dict(zip(*np.unique(detections["BAND"], return_counts=True)))
+            reject = any(det_per_band.get(band, 0) < min_det for band, min_det in kern.min_det_per_band_YSE.items())
+
+            if not reject:
+                sub_lcs_rainbow.append(table_rainbow[mask_rainbow])
+                sub_lcs_bazin.append(table_bazin[mask_bazin])
+        
+        file_rainbow = f"data_YSE/formatted/{kern.PLASTICC_TARGET_INV.get(object_class)}_{field}_f{str(round(100*fraction))}_rainbow.pkl"
+        file_bazin = f"data_YSE/formatted/{kern.PLASTICC_TARGET_INV.get(object_class)}_{field}_f{str(round(100*fraction))}_bazin.pkl"
+
+        with open(file_rainbow, "wb") as handle:
+            pickle.dump(sub_lcs_rainbow, handle)
+            
+        with open(file_bazin, "wb") as handle:
+            pickle.dump(sub_lcs_bazin, handle)
 
 
-def format_elasticc(object_class, max_n):
-
+def preprocess(dataset, object_class, field):
     """
-    Preprocess raw ELASTiCC training sample. Apply cuts on
-    passbands and number of points. Apply transformations to light curves.
-
+    Normalize each light curve of the dataset.
+    Saves a pickle file of the preprocessed data.
+    
     Parameters
     ----------
+    database: str
+        'plasticc' or 'YSE'
     object_class: str
-        Name of the ELASTiCC class to compute
-    max_n: int
-        Maximum number of object to compute
-        
+        Name of the PLAsTiCC class to compute
+    field: str
+        LSST cadence to use : 'wfd' or 'ddf' (always 'wfd' for YSE)
+
     Returns
     -------
-    lcs : list
-        list of astropy tables. Each table is one light curve.
+    list
+    List of normalized astropy tables
     """
-    
-    if kern.global_seed != None:
-        random.seed(kern.global_seed)
-
-    heads = sorted(glob.glob(f"{kern.ELASTiCC_path}{object_class}/*_HEAD.FITS.gz"))
-    phots = sorted(glob.glob(f"{kern.ELASTiCC_path}{object_class}/*_PHOT.FITS.gz"))
-    assert len(heads) != 0, "no *_HEAD_FITS.gz are found"
-    assert len(heads) == len(phots), "there are different number of HEAD and PHOT files"
-
-    min_det_per_band = kern.min_det_per_band
-
-    lcs = []
-    
-    for head, phot in zip(heads, phots):
-        if len(lcs)<max_n:
-            lcs += list(parse_fits_snana(head, phot, min_det_per_band=min_det_per_band))
-
-    n_objects = int(np.where(max_n<=len(lcs), max_n, len(lcs)))
-    lcs = random.sample(lcs, n_objects, )
-
-    # Save preprocessed data as pkl for later use
-    if not os.path.exists("data_elasticc"):
-        os.mkdir("data_elasticc")
-
-    if not os.path.exists("data_elasticc/formatted"):
-        os.mkdir("data_elasticc/formatted")
-        
-    file = f"data_elasticc/formatted/{object_class}.pkl"
-
-    with open(file, "wb") as handle:
-        pickle.dump(lcs, handle)
-
-
-def preprocess(dataset, object_class, field=''):
 
     path_to_use = kern.main_path + f'/data_{dataset}/formatted/{object_class}_{field}.pkl'
-                          
+
     with open(path_to_use, "rb") as handle:
         lcs = pickle.load(handle)
 
@@ -289,16 +299,12 @@ def preprocess(dataset, object_class, field=''):
     if not os.path.exists(f"data_{dataset}/preprocessed"):
         os.mkdir(f"data_{dataset}/preprocessed")
         
-    if dataset == 'elasticc':
-        file = f"data_{dataset}/preprocessed/{object_class}"
-        
-    else:
-        file = f"data_{dataset}/preprocessed/{object_class}_{field}"
+    file = f"data_{dataset}/preprocessed/{object_class}_{field}"
 
     with open(f'{file}.pkl' , "wb") as handle:
-        pickle.dump(lcs, handle)
+        pickle.dump(new_lcs, handle)
 
-    return lcs
+    return new_lcs
 
 
 def normalize(lc):
@@ -320,7 +326,7 @@ def normalize(lc):
         - Added columns before normalization : max_flux, max_flux_time
     """
 
-    normband = lc[lc["BAND"] == "r "]
+    normband = lc[(lc["BAND"] == "r ") | (lc["BAND"] == "PSr")]
     maxi = normband["FLUXCAL"].max()
 
     lc["max_flux"] = maxi
@@ -332,70 +338,6 @@ def normalize(lc):
 
     return lc
 
-def parse_fits_snana(
-    head: Union[str, Path], phot: Union[str, Path], *, min_det_per_band: Dict[str, int]
-) -> List[Table]:
-
-    """
-    Reads ELASTiCC training data. Returns it after applying cuts
-    on passbands, number of points and saturation flux. 
-    Also requires at least one point before and after peak.
-
-    Parameters
-    ----------
-    head: Union[str, Path]
-        Paths to ELASTiCC head files
-
-    phot: Union[str, Path]
-        Paths to ELASTiCC phot files
-
-    min_det_per_band: dict
-        Dict of filter names along with the minimum
-        number of point required for each filter
-
-    Returns
-    -------
-    lcs : list
-        list of astropy tables. Each table is one light curve.
-    """
-
-    i = head.find("_HEAD.FITS.gz")
-    assert head[:i] == phot[:i], f"HEAD and PHOT files name mismatch: {head}, {phot}"
-
-    bands = np.array(list(min_det_per_band), dtype=bytes)
-
-    lcs = []
-    for lc in sncosmo.read_snana_fits(head, phot):
-
-        # Keep passbands we need
-        lc = lc[np.isin(lc["BAND"], bands)]
-
-        # Remove saturated observations
-        lc = lc[lc["FLUXCAL"] <= SATURATION_FLUX]
-
-        # we use this variable for cuts only, while putting the full light curve into dataset
-        detections = lc[(lc["PHOTFLAG"] != 0)]
-        det_per_band = dict(zip(*np.unique(detections["BAND"], return_counts=True)))
-
-        # Not enough number of detections in some passband
-        not_enough = False
-        for band, min_det in min_det_per_band.items():
-            if det_per_band.get(band, 0) < min_det:
-                not_enough = True
-                
-        if not_enough:
-            continue
-                
-        # We requiere to have observation before and after peak
-        if (lc.meta['SIM_PEAKMJD'] < detections['MJD'][0]
-                 or lc.meta['SIM_PEAKMJD'] > detections['MJD'][-1]):
-            continue
-
-        lcs.append(lc)
-
-    return lcs
-
-
 def Fbaz(t, a, t0, tfall, trise):
     """
     Compute flux using Bazin with
@@ -406,13 +348,13 @@ def Fbaz(t, a, t0, tfall, trise):
     t: array
         Time value of data points.
     a: float
-        Bazin amplitude.
+        Amplitude.
     t0: float
-        Time value related to time of maximum flux.
+        Time phase (related to peak time by : tpeak = t0 + trise × ln(tfall/trise − 1))
     tfall: float
-        Value related to length of the falling part of the slope.
+        Falling factor
     trise: float
-        Value related to length of the rising part slope.
+        Rising factor
 
     Returns:
     --------
@@ -546,13 +488,67 @@ def planck(nu, T):
     array of floats
         Computed intensity.
     """
+    integrate = False
+    if np.any(nu < 0):
+        nu = np.vectorize(sncosmoband_convert.get)(nu)
+        integrate = True
     nu = np.asarray(nu)
-    if np.issubdtype(nu.dtype, np.number):
-        return planck_nu(nu, T)
-    elif np.issubdtype(nu.dtype, np.string):
+    
+    if integrate:
         return planck_passband(nu, T)
-    raise ValueError(f'Invalid type for nu: {nu.dtype}')
+   
+    return planck_nu(nu, T)
 
+
+
+''' OLD Function used taking into account redshift z
+#######################################################
+# Flux of lightcurves at any time at any frequency
+def Fnuz(x, a, t0, tfall, trise, Tmin, dT, ksig, z):
+    t, nu = x
+    T = Tsig(t, Tmin, dT, ksig, t0) * (1+z)
+    Fbol = Fbaz(t, a, t0, tfall, trise)
+    amplitude = 1e15
+
+    return np.pi / c.sigma_sb.value * Fbol * planckz(nu, T, z) / T**4 * amplitude
+
+def planckz(nu, T, z):
+    integrate = False
+    if np.any(nu < 0):
+        nu = np.vectorize(sncosmoband_convert.get)(nu)
+        integrate = True
+    nu = np.asarray(nu)
+    return planck_passbandz(nu, T, z)
+
+def planck_passbandz(passband, T, z):
+    passband, T = np.broadcast_arrays(passband, T)
+
+    # Speed up computation if only a single value is passed
+    if passband.size == 1:
+        return planck_passband_splinez(passband.item(), z)(T)
+
+    unique_passbandes, indices = np.unique(passband, return_inverse=True)
+    output = np.zeros_like(passband, dtype=float)
+    for index, passband in enumerate(unique_passbandes):
+        T_passband = T[indices == index]
+        spline = planck_passband_splinez(passband, z)
+        output[indices == index] = spline(T_passband)
+
+    return output
+
+def planck_passband_splinez(passband, z, T_min=1e2, T_max=1e6, T_steps=10_000):
+    passband = sncosmo.get_bandpass(passband)
+    nu = (c.c / (passband.wave * u.AA)).to_value(u.Hz)
+    nu = nu * (1+z)
+    trans = passband.trans  # photon counter transmission
+
+    T = np.logspace(np.log10(T_min), np.log10(T_max), T_steps)
+    black_body_integral = simpson(x=nu, y=planck_nu(nu, T[:, None]) * trans / nu, axis=-1)
+    transmission_integral = simpson(x=nu, y=trans / nu)
+
+    return UnivariateSpline(x=T, y=black_body_integral / transmission_integral, s=0, k=3, ext='raise')
+##################################################################################
+'''
 
 # Flux of lightcurves at any time at any frequency
 def Fnu(x, a, t0, tfall, trise, Tmin, dT, ksig):
@@ -618,7 +614,6 @@ def perform_fit_rainbow(obj):
         nb_points: int
             Total number of measurements in all bands
     """
-    obj["NU"] = np.vectorize(freq_dic.get)(list(obj["BAND"]))
 
     global_flux = obj["FLUXCAL"]
     global_fluxerr = obj["FLUXCALERR"]
@@ -665,7 +660,7 @@ def perform_fit_rainbow(obj):
     return fit.values, additionnal
 
 
-def perform_fit_bazin(obj):
+def perform_fit_bazin(obj, bands):
     """
     Find best fit parameters for Bazin method using iminuit.
     Adds additionnal values useful for later ML.
@@ -693,7 +688,7 @@ def perform_fit_bazin(obj):
     """
     all_parameters = []
 
-    for band in ["g ", "r ", "i "]:
+    for band in bands:
 
         lc = obj[obj["BAND"] == band]
         global_flux = lc["FLUXCAL"]
@@ -734,7 +729,7 @@ def perform_fit_bazin(obj):
     return all_parameters
 
 
-def extract_rainbow(lcs, object_class, split, database):
+def extract_rainbow(lcs, object_class, split, database, band_wavelength):
     """
     Apply perform_fit_rainbow to each object.
     Build and save a parameter dataframe.
@@ -747,10 +742,25 @@ def extract_rainbow(lcs, object_class, split, database):
         Name of the ELASTiCC class to compute
     split: int
         Number of the core computing the extraction
+    band_wavelength: str
+        'effective' to use only the effective
+        wavelength of the filter. Uses "freq_dic" defined below
+        
+        'integrate' to use the filter wavelength
+        profile as provided in sncosmo. Uses "sncosmoband_convert_temporary"
+        and "sncosmoband_convert" because iminuit can only use numerical
+        values as input.
+        
     """
 
     all_param = []
     for obj in lcs:
+        if band_wavelength=='effective':
+            obj["NU"] = np.vectorize(freq_dic.get)(list(obj["BAND"]))
+            
+        elif band_wavelength=='integrate':
+            obj["NU"] = np.vectorize(sncosmoband_convert_temporary.get)(obj["BAND"])
+        
         extraction = perform_fit_rainbow(obj)
         all_param.append(list(extraction[0].to_dict().values()) + extraction[1])
 
@@ -759,7 +769,7 @@ def extract_rainbow(lcs, object_class, split, database):
         data=all_param,
     )
 
-    features.to_parquet(f"data_{database}/features/rainbow/{object_class}/features_{object_class}_{split}.parquet")
+    features.to_parquet(f"data_{database}/features/rainbow_{band_wavelength}/{object_class}/features_{object_class}_{split}.parquet")
 
 
 def extract_bazin(lcs, object_class, split, database):
@@ -776,16 +786,21 @@ def extract_bazin(lcs, object_class, split, database):
     split: int
         Number of the core computing the extraction
     """
+   
+    bands = ["g ", "r "]
+    
+    if database != "YSE" :
+        bands += "i "
 
     all_param = []
     name_param = []
 
     for idx, obj in enumerate(lcs):
 
-        param = perform_fit_bazin(obj)
+        param = perform_fit_bazin(obj, bands)
 
         obj_param = []
-        for idx_band, band in enumerate(["g", "r", "i"]):
+        for idx_band, band in enumerate([i[0] for i in bands]):
 
             if idx == 0:
                 baz_name = [x + f"_{band}" for x in list(Fbaz.__code__.co_varnames[1:]) + ["error", "nb_points"]]
@@ -810,8 +825,35 @@ def extract_bazin(lcs, object_class, split, database):
     features = pd.DataFrame(columns=flat_name_param, data=all_param)
     features.to_parquet(f"data_{database}/features/bazin/{object_class}/features_{object_class}_{split}.parquet")
 
-        
-def train_test_cutting_generator(prepro, perband=False, bands = ['g ', 'r ', 'i '], mdpb=kern.min_det_per_band):
+def train_test_cutting_generator_YSE_rainbow(sub_formatted, formatted_test):
+    """
+    Function used once test dataset has been generated for YSE dataset
+    Use every point non selected in test, including PS-i band !!
+
+    Parameters
+    ----------
+    sub_formatted: list
+        List of astropy table lightcurves
+    formatted_test: list
+        List of testing sample astropy table
+    
+    Yields
+    ------
+    train, test
+        astropy table, astropy table
+    """
+
+    for idx in range(len(sub_formatted)):
+        obj, bazin_test = sub_formatted[idx], formatted_test[idx]
+        obj_train = obj[[not i in (bazin_test['Unnamed: 0']) for i in obj['Unnamed: 0']]]
+        obj_test = obj[[i in (bazin_test['Unnamed: 0']) for i in obj['Unnamed: 0']]]
+
+        yield obj_train, obj_test
+
+
+    
+def train_test_cutting_generator(formatted, bands = ['g ', 'r ', 'i '], mdpb=kern.min_det_per_band,\
+                                 mtot=sum(list(kern.min_det_per_band.values())), seed=kern.default_seed):
     """
     Remove random windows of detected points.
     Use removed points to create testing dataset.
@@ -820,11 +862,20 @@ def train_test_cutting_generator(prepro, perband=False, bands = ['g ', 'r ', 'i 
 
     Parameters
     ----------
-    prepro: list
+    formatted: list
         List of astropy table lightcurves
     bands: list
         Name of the passbands used in the dataset
         Default is ['g ', 'r ', 'i ']
+    mdpb: dict
+        Minimum detection per passband cut condition.
+        Default value is defined in kernel
+    mtot: int
+        Total number of points required throught the passbands
+        Defaut is the sum of the minimum number of points
+        for each band as defined kernel
+    seed: int
+        Seed used to randomly generate the bins 
     
     Yields
     ------
@@ -832,96 +883,53 @@ def train_test_cutting_generator(prepro, perband=False, bands = ['g ', 'r ', 'i 
         astropy table, astropy table
     """
     
-    if kern.global_seed != None:
-        random.seed(kern.global_seed)
-    
-    for obj in prepro:
-        
+    random.seed(seed)
+
+    for obj in formatted: 
+            
         all_bands_train, all_bands_test = [], []
-        
-        if perband:
-            
-            invalid_band = False
-            for band in bands:
 
-                if invalid_band:
-                    continue
+        mask = [False] * len(obj)
+        for band in bands:
+            mask = mask | (obj['BAND'] == band)
 
-                sub_obj = obj[obj['BAND'] == band]
-                bins = np.arange(sub_obj['MJD'].min(), sub_obj['MJD'].max(), kern.point_cut_window)
+        sub_obj = obj[mask]
 
-                valid = []
-                for idx in range(len(bins)-1):
-                    if ((sub_obj['MJD'] >= bins[idx]) &\
-                        (sub_obj['MJD'] <= bins[idx + 1]) &\
-                        (sub_obj['detected_bool'] == 1)).sum()>0:
+        bins = np.arange(sub_obj['MJD'].min(), sub_obj['MJD'].max(), kern.point_cut_window)
 
-                        valid.append(idx)
+        valid = []
 
-                if len(valid)<=2:
-                    invalid_band = True
-                    continue
+        for idx in range(len(bins)-1):
+            if ((sub_obj['MJD'] >= bins[idx]) &\
+                (sub_obj['MJD'] <= bins[idx + 1]) &\
+                (sub_obj['detected_bool'] == 1)).sum()>0:
 
-                chosen = random.sample(valid, 2)
-                mask = (((sub_obj['MJD']>=bins[chosen[0]]) &\
-                         (sub_obj['MJD']<bins[chosen[0] + 1])) |\
-                        ((sub_obj['MJD']>=bins[chosen[1]]) &\
-                         (sub_obj['MJD']<bins[chosen[1] + 1])))
+                valid.append(idx)
 
-                if (~mask).sum() < mdpb.get(band):
-                    invalid_band = True
-                    continue
+        if len(valid)<=2:
+            continue
 
-                all_bands_train.append(sub_obj[~mask])
-                all_bands_test.append(sub_obj[mask])
+        chosen = random.sample(valid, 2)
+        mask = (((sub_obj['MJD']>=bins[chosen[0]]) &\
+                 (sub_obj['MJD']<bins[chosen[0] + 1])) |\
+                ((sub_obj['MJD']>=bins[chosen[1]]) &\
+                 (sub_obj['MJD']<bins[chosen[1] + 1])))
 
-            if invalid_band:
-                continue
+        invalid = False
+        for band in bands:
+            pointperband = len(sub_obj[(~mask) & (sub_obj['BAND'] == band)])
 
-            yield vstack(all_bands_train), vstack(all_bands_test)
-
-
-        else:
-
-            mask = [False] * len(obj)
-            for band in bands:
-                mask = mask | (obj['BAND'] == band)
-
-            sub_obj = obj[mask]
-
-            bins = np.arange(sub_obj['MJD'].min(), sub_obj['MJD'].max(), kern.point_cut_window)
-
-            valid = []
-
-            for idx in range(len(bins)-1):
-                if ((sub_obj['MJD'] >= bins[idx]) &\
-                    (sub_obj['MJD'] <= bins[idx + 1]) &\
-                    (sub_obj['detected_bool'] == 1)).sum()>0:
-
-                    valid.append(idx)
-
-            if len(valid)<=2:
-                continue
-
-            chosen = random.sample(valid, 2)
-            mask = (((sub_obj['MJD']>=bins[chosen[0]]) &\
-                     (sub_obj['MJD']<bins[chosen[0] + 1])) |\
-                    ((sub_obj['MJD']>=bins[chosen[1]]) &\
-                     (sub_obj['MJD']<bins[chosen[1] + 1])))
-            
-            invalid_band = False
-            for band in bands:
-                pointperband = len(sub_obj[(~mask) & (sub_obj['BAND'] == band)])
+            if pointperband < mdpb.get(band):
+                invalid = True
                 
-                if pointperband < mdpb.get(band):
-                    invalid_band = True
-                    
-            if invalid_band:
-                continue
-                    
-            yield sub_obj[~mask], sub_obj[mask]
-        
-        
+            if len(sub_obj[~mask]) < mtot:
+                invalid = True
+                
+        if invalid:     
+            continue
+
+        yield sub_obj[~mask], sub_obj[mask]
+
 def train_test_rising_cutting_generator(prepro, bands = ['g ', 'r ', 'i '], mdpb=kern.min_det_per_band):
     """
     Remove all points after true peak.
@@ -936,15 +944,16 @@ def train_test_rising_cutting_generator(prepro, bands = ['g ', 'r ', 'i '], mdpb
     bands: list
         Name of the passbands used in the dataset
         Default is ['g ', 'r ', 'i ']
+    mdpb: dict
+        Minimum detection per passband cut condition.
+        Default value is defined in kernel
 
     Yields
     ------
     train, test
         astropy table, astropy table
     """
-    if kern.global_seed != None:
-        random.seed(kern.global_seed)
-        
+
     for obj in prepro:
         
         band_mask = [False] * len(obj)
@@ -952,7 +961,7 @@ def train_test_rising_cutting_generator(prepro, bands = ['g ', 'r ', 'i '], mdpb
             band_mask = band_mask | (obj['BAND'] == band)
             
         obj = obj[band_mask]
-        invalid_band = False
+        invalid = False
         all_bands_train, all_bands_test = [], []
 
         threshold = obj.meta['true_peakmjd']
@@ -961,10 +970,9 @@ def train_test_rising_cutting_generator(prepro, bands = ['g ', 'r ', 'i '], mdpb
         if detec_before == 0:
             continue
 
-
         for band in bands:
 
-            if invalid_band:
+            if invalid:
                 continue
                 
             sub_obj = obj[obj['BAND'] == band]
@@ -972,72 +980,17 @@ def train_test_rising_cutting_generator(prepro, bands = ['g ', 'r ', 'i '], mdpb
 
             if ((~mask).sum() < mdpb.get(band)) |\
                ((mask).sum() < 1):
-                invalid_band = True
+                invalid = True
                 continue
 
             all_bands_train.append(sub_obj[~mask])
             all_bands_test.append(sub_obj[mask])
 
-        if invalid_band:
+        if invalid:
             continue
             
         yield vstack(all_bands_train), vstack(all_bands_test)
         
-def OLDtrain_test_rising_cutting_generator(prepro, bands = ['g ', 'r ', 'i '], mdpb=kern.min_det_per_band):
-    """
-    Choose a random point during rising phase, remove all points after this.
-    Use removed points to create testing dataset.
-    Use remaining points to create training dataset
-    Ensures that the training datasets has enough points.
-
-    Parameters
-    ----------
-    prepro: list
-        List of astropy table lightcurves
-    bands: list
-        Name of the passbands used in the dataset
-        Default is ['g ', 'r ', 'i ']
-    
-    Yields
-    ------
-    train, test
-        astropy table, astropy table
-    """
-    if kern.global_seed != None:
-        random.seed(kern.global_seed)
-        
-    for obj in prepro:
-        invalid_band = False
-        all_bands_train, all_bands_test = [], []
-        
-        mini = (obj[obj['detected_bool'] == 1]['MJD']).min()
-        maxi = obj.meta['true_peakmjd']
-        
-        if mini>=maxi:
-            continue
-
-        threshold = random.uniform(mini, maxi)
-            
-        for band in bands:
-
-            if invalid_band:
-                continue
-                
-            sub_obj = obj[obj['BAND'] == band]
-            mask = sub_obj['MJD'] > threshold
-
-            if ((~mask).sum() < mdpb.get(band)) |\
-               ((mask).sum() < 1):
-                invalid_band = True
-                continue
-
-            all_bands_train.append(sub_obj[~mask])
-            all_bands_test.append(sub_obj[mask])
-
-        if invalid_band:
-            continue
-            
-        yield vstack(all_bands_train), vstack(all_bands_test)
 
 def check_inputs(database, field):
     
@@ -1049,8 +1002,7 @@ def check_inputs(database, field):
     database: str
         'elasticc', 'plasticc' or 'YSE'
     field: str
-        In the case of plasticc and YSE.
-        'ddf' or 'wfd'
+        'ddf' or 'wfd' (always 'wfd' for YSE)
     """
     
     if (database != 'elasticc') & (database != 'plasticc') & (database != 'YSE'):
@@ -1063,7 +1015,7 @@ def check_inputs(database, field):
             os.mkdir(f"data_{database}/")
     
     
-def format_target(object_class, n_max, database, field=''):
+def format_target(object_class, n_max, database, field):
     """
     Format a given class to the correct data shape.
     Saves a pkl file
@@ -1078,25 +1030,19 @@ def format_target(object_class, n_max, database, field=''):
     database: str
         'elasticc', 'plasticc' or 'YSE'
     field: str
-        In the case of plasticc and YSE.
         'ddf' or 'wfd' (always 'wfd' for YSE)
     """
     
     check_inputs(database, field)
-
-    if database == 'elasticc':
-        format_elasticc(object_class, n_max)
-            
-    elif (database == 'plasticc') or (database == 'YSE'):
         
-        if database == 'plasticc':
-            format_plasticc(kern.PLASTICC_TARGET.get(object_class), n_max, field)
+    if database == 'plasticc':
+        format_plasticc(kern.PLASTICC_TARGET.get(object_class), n_max, field)
 
-        if database == 'YSE':
-            format_YSE(kern.PLASTICC_TARGET.get(object_class), n_max, field)
-            
+    if database == 'YSE':
+        format_YSE(kern.PLASTICC_TARGET.get(object_class), n_max, field)
 
-def preprocess_target(object_class, database, field=''):
+
+def preprocess_target(object_class, database, field):
     """
     Preprocess a given class from a formated pkl file.
     Saves a pkl file
@@ -1106,9 +1052,8 @@ def preprocess_target(object_class, database, field=''):
     object_class: str
         Type of object to format
     database: str
-        'elasticc', 'plasticc' or 'YSE'
+        'plasticc' or 'YSE'
     field: str
-        In the case of plasticc and YSE.
         'ddf' or 'wfd' (always 'wfd' for YSE)
     """
         
@@ -1116,7 +1061,7 @@ def preprocess_target(object_class, database, field=''):
     preprocess(database, object_class, field)
         
 
-def feature_extract_target(object_class, fex_function, cores, database, field=''):
+def feature_extract_target(object_class, fex_function, cores, database, field, band_wavelength):
     """
     Extract features of a given class from a preprocessed pkl file.
     Saves a parquet file
@@ -1131,46 +1076,44 @@ def feature_extract_target(object_class, fex_function, cores, database, field=''
     database: str
         'elasticc', 'plasticc' or 'YSE'
     field: str
-        In the case of plasticc and YSE.
         'ddf' or 'wfd' (always 'wfd' for YSE)
+    band_wavelength: str
+        'effective' to use only the effective
+        wavelength of the filter. Uses "freq_dic" defined below
+        
+        'integrate' to use the filter wavelength
+        profile as provided in sncosmo. Uses "sncosmoband_convert_temporary"
+        and "sncosmoband_convert" because iminuit can only use numerical
+        values as input.
     """
 
     start_time = time.time()
+    show_band_wavelength = "_" + band_wavelength if fex_function == 'rainbow' else ''
+
 
     if not os.path.exists(f"data_{database}/features/"):
             os.mkdir(f"data_{database}/features/")
     
-    if not os.path.exists(f"data_{database}/features/{fex_function}/"):
-            os.mkdir(f"data_{database}/features/{fex_function}/")
+    if not os.path.exists(f"data_{database}/features/{fex_function}{show_band_wavelength}/"):
+            os.mkdir(f"data_{database}/features/{fex_function}{show_band_wavelength}/")
 
     check_inputs(database, field)
     
     if (fex_function != 'rainbow') & (fex_function != 'bazin'):
         raise ValueError('Function must be rainbow or bazin')
         
+    if (band_wavelength != 'effective') & (band_wavelength != 'integrate'):
+        raise ValueError('Band_wavelength must be effective or integrate')
             
-    if database == 'elasticc':
-        
-        if not os.path.exists(f"data_{database}/features/{fex_function}/{object_class}"):
-            os.mkdir(f"data_{database}/features/{fex_function}/{object_class}")
-        
-        subprocess.call(
-            shlex.split(f"sh feature_extraction.sh {cores} {object_class} {fex_function} {database}")
-        )
 
-        temp_path = f"data_{database}/features/{fex_function}/{object_class}/"
-        
-        
-    if (database == 'plasticc') or (database == 'YSE'):
+    if not os.path.exists(f"data_{database}/features/{fex_function}{show_band_wavelength}/{object_class}_{field}"):
+        os.mkdir(f"data_{database}/features/{fex_function}{show_band_wavelength}/{object_class}_{field}")
 
-        if not os.path.exists(f"data_{database}/features/{fex_function}/{object_class}_{field}"):
-            os.mkdir(f"data_{database}/features/{fex_function}/{object_class}_{field}")
-            
-        subprocess.call(
-            shlex.split(f"sh feature_extraction.sh {cores} {object_class}_{field} {fex_function} {database}")
-        )
+    subprocess.call(
+        shlex.split(f"sh feature_extraction.sh {cores} {object_class}_{field} {fex_function} {database} {band_wavelength}")
+    )
 
-        temp_path = f"data_{database}/features/{fex_function}/{object_class}_{field}/"
+    temp_path = f"data_{database}/features/{fex_function}{show_band_wavelength}/{object_class}_{field}/"
         
         
     n_computed_files = len(
@@ -1204,44 +1147,22 @@ def feature_extract_target(object_class, fex_function, cores, database, field=''
     )
     
     total_time = time.time() - start_time
-    
-    if database == 'elasticc':
-        
-        features.to_parquet(f"data_{database}/features/{fex_function}/{object_class}_features.parquet")
 
-        with open(f"data_{database}/features/{fex_function}/{object_class}_info.txt", "w") as f:
-            f.write(f"Feature extraction took {total_time} sec, over {cores} cores")
-            f.write("\n")
-            f.write(
-                f'The features table take {os.path.getsize(f"data_{database}/features/{fex_function}/{object_class}_features.parquet")} bytes of space'
-            )
-            f.write("\n")
-            f.write((features.head()).to_string())
+    features.to_parquet(f"data_{database}/features/{fex_function}{show_band_wavelength}/{object_class}_{field}_features.parquet")
 
-        shutil.rmtree(temp_path)
+    with open(f"data_{database}/features/{fex_function}{show_band_wavelength}/{object_class}_{field}_info.txt", "w") as f:
+        f.write(f"Feature extraction took {total_time} sec, over {cores} cores")
+        f.write("\n")
+        f.write(
+            f'The features table take {os.path.getsize(f"data_{database}/features/{fex_function}{show_band_wavelength}/{object_class}_{field}_features.parquet")} bytes of space'
+        )
+        f.write("\n")
+        f.write((features.head()).to_string())
 
-        print(f"{object_class} features have been computed succesfully")
-
-
-    elif (database == 'plasticc') or (database == 'YSE'):
-        
-        features.to_parquet(f"data_{database}/features/{fex_function}/{object_class}_{field}_features.parquet")
-
-        with open(f"data_{database}/features/{fex_function}/{object_class}_{field}_info.txt", "w") as f:
-            f.write(f"Feature extraction took {total_time} sec, over {cores} cores")
-            f.write("\n")
-            f.write(
-                f'The features table take {os.path.getsize(f"data_{database}/features/{fex_function}/{object_class}_{field}_features.parquet")} bytes of space'
-            )
-            f.write("\n")
-            f.write((features.head()).to_string())
-
-        shutil.rmtree(temp_path)
-
-        print(f"{object_class}_{field} features have been computed succesfully")
+    shutil.rmtree(temp_path)
         
         
-def train_test_bins_target(object_class, database, field=''):
+def train_test_bins_target(object_class, database, field):
     """
     Cut data into a train and a test sample
     using the random bins removal method
@@ -1258,29 +1179,49 @@ def train_test_bins_target(object_class, database, field=''):
         'ddf' or 'wfd' (always 'wfd' for YSE)
     """
     
-    bands = ['g ', 'r ', 'i ']
-    mdpb = kern.min_det_per_band
-
-    if database == 'YSE':
-        mdpb = kern.min_det_per_band_YSE
-        bands = ['g ', 'r ', 'PSg', 'PSr', 'PSi']
-
     path = f'data_{database}/formatted/'
-
-    with open(f'{path}{object_class}_{field}.pkl', "rb") as handle:
-        formatted = pickle.load(handle)
         
-    generator = train_test_cutting_generator(formatted, bands=bands, mdpb=mdpb)
+    if database == 'YSE':
+        seed = int(field[field.find('_v')+2:])
+        bands = ['g ', 'r ']
+        mdpb = kern.min_det_per_band_YSE
+        mtot = sum(list(kern.min_det_per_band.values()))
+        unversion_field = field[:field.find('_v')]
+        
+        with open(f'{path}{object_class}_{unversion_field}.pkl', "rb") as handle:
+            formatted = pickle.load(handle)
+
+    else:
+        seed = kern.default_seed
+        bands = ['g ', 'r ', 'i ']
+        mdpb = kern.min_det_per_band
+        mtot = sum(list(kern.min_det_per_band.values()))
+        
+        with open(f'{path}{object_class}_{field}.pkl', "rb") as handle:
+            formatted = pickle.load(handle)
+
+    generator = train_test_cutting_generator(formatted, bands=bands, mdpb=mdpb, mtot=mtot, seed=seed)
+    
+    # Case of YSE, we utilize the train_test performed for bazin and we add PSi
+    if '_rainbow' in field:
+        bazin_field = field.replace("_rainbow", "_bazin")
+        
+        with open(f'{path}{object_class}_test_w{kern.point_cut_window}_{bazin_field}.pkl', "rb") as handle:
+            formatted_test = pickle.load(handle)
+            
+        sub_formatted = [i for i in formatted if (i.meta['SNID'] in ([j.meta['SNID'] for j in formatted_test]))]
+        generator = train_test_cutting_generator_YSE_rainbow(sub_formatted, formatted_test)
+    
     train_test = list(generator)
 
     with open(f'{path}{object_class}_train_w{kern.point_cut_window}_{field}.pkl', "wb") as handle:
         pickle.dump([x[0] for x in train_test], handle)
-        
+
     with open(f'{path}{object_class}_test_w{kern.point_cut_window}_{field}.pkl', "wb") as handle:
         pickle.dump([x[1] for x in train_test], handle)
-        
+
     
-def train_test_rising_target(object_class, database, field=''):
+def train_test_rising_target(object_class, database, field):
     """
     Cut data into a train and a test sample
     using the after rising removal method
@@ -1306,17 +1247,31 @@ def train_test_rising_target(object_class, database, field=''):
         
     path = f'data_{database}/formatted/'
 
-    with open(f'{path}{object_class}_{field}.pkl', "rb") as handle:
-        formatted = pickle.load(handle)
-        
-    generator = train_test_rising_cutting_generator(formatted, bands=bands, mdpb=mdpb)
-    train_test = list(generator)
+    if database == 'elasticc':
+        with open(f'{path}{object_class}.pkl', "rb") as handle:
+            formatted = pickle.load(handle)
 
-    with open(f'{path}{object_class}_train_rising_{field}.pkl', "wb") as handle:
-        pickle.dump([x[0] for x in train_test], handle)
-        
-    with open(f'{path}{object_class}_test_rising_{field}.pkl', "wb") as handle:
-        pickle.dump([x[1] for x in train_test], handle)
+        generator = train_test_rising_cutting_generator(formatted, bands=bands, mdpb=mdpb)
+        train_test = list(generator)
+
+        with open(f'{path}{object_class}_train_rising.pkl', "wb") as handle:
+            pickle.dump([x[0] for x in train_test], handle)
+
+        with open(f'{path}{object_class}_test_rising.pkl', "wb") as handle:
+            pickle.dump([x[1] for x in train_test], handle)
+            
+    else:
+        with open(f'{path}{object_class}_{field}.pkl', "rb") as handle:
+            formatted = pickle.load(handle)
+
+        generator = train_test_rising_cutting_generator(formatted, bands=bands, mdpb=mdpb)
+        train_test = list(generator)
+
+        with open(f'{path}{object_class}_train_rising_{field}.pkl', "wb") as handle:
+            pickle.dump([x[0] for x in train_test], handle)
+
+        with open(f'{path}{object_class}_test_rising_{field}.pkl', "wb") as handle:
+            pickle.dump([x[1] for x in train_test], handle)
         
         
 # __________________________USEFUL VALUES________________________
@@ -1333,8 +1288,22 @@ nu_Y = Am_to_Hz(9711)
 nu_PSg = Am_to_Hz(4811)
 nu_PSr = Am_to_Hz(6156)
 nu_PSi = Am_to_Hz(7504)
+nu_ZTFg = Am_to_Hz(4723)
+nu_ZTFr = Am_to_Hz(6340)
+nu_ZTFi = Am_to_Hz(7886)
+nu_B = Am_to_Hz(4450)
 
-freq_dic = {"u ": nu_u, "g ": nu_g, "r ": nu_r, "i ": nu_i, "z ": nu_z, "Y ": nu_Y, "PSg": nu_PSg, "PSr": nu_PSr, "PSi": nu_PSi}
+
+freq_dic = {"u ": nu_u, "g ": nu_g, "r ": nu_r, "i ": nu_i, "z ": nu_z, "Y ": nu_Y, "ZTFg": nu_ZTFg, "ZTFr": nu_ZTFr, "ZTFi": nu_ZTFi, "PSg":nu_PSg, "PSr":nu_PSr, "PSi":nu_PSi, "B":nu_B}
+
+sncosmoband_convert_temporary = {"u ": -1, "g ": -2, "r ": -3, "i ": -4, "z ": -5, "Y ": -6,\
+                                "ZTFg":-7, "ZTFr":-8, "ZTFi":-9, "PSg":-10, "PSr":-11, "PSi":-12, "B":-13}
+
+sncosmoband_convert = {-1: "lsstu", -2: "lsstg", -3: "lsstr",\
+                       -4: "lssti", -5: "lsstz", -6: "lssty",\
+                       -7: "ztfg", -8: "ztfr", -9: "ztfi",\
+                       -10: "ps1::g", -11: "ps1::r",\
+                       -12: "ps1::i", -13: "standard::b"}
 
 # ________________________________________________________________
 
@@ -1355,6 +1324,7 @@ if __name__ == "__main__":
     arg_parser.add_argument('--cores', default=1, help='Number of cores to use')
     arg_parser.add_argument('--database', required=True, help='plasticc or elasticc')
     arg_parser.add_argument('--field', default='ddf', help='for plasticc : ddf, wfd or all')
+    arg_parser.add_argument('--band_wavelength', default='effective', help='Use effective passband wavelength or integrate ?')
     
     args = arg_parser.parse_args()
 
@@ -1363,50 +1333,81 @@ if __name__ == "__main__":
     cores = args.cores
     database = args.database
     field = args.field
+    band_wavelength = args.band_wavelength
     
-    fex_functions = ['rainbow']
-    if database != 'YSE':
-        fex_functions += ['bazin']
-
+    
+    fex_functions = ['bazin', 'rainbow']
+    fractions = ['']
     
     # PROCESS TO A COMPLETE FEATURE EXTRACTION :
 
     # Format original data
     format_target(object_class, n_max, database, field)
     print(f'{object_class} formatted')
-    
-    # Preprocess entire light curves
-    preprocess_target(object_class, database, field)
-    print(f'{object_class} preprocessed')
-    
-    # Remove bins of points and preprocess the training data
-    train_test_bins_target(object_class, database, field)
-    bin_class = object_class + f'_train_w{kern.point_cut_window}'
-    print(f'{bin_class} created')
-    preprocess_target(bin_class, database, field)
-    print(f'{bin_class} preprocessed')
+  
+    if database == 'YSE':
+        fractions = [f"{field}_f{str(round(100*fraction))}" for fraction in kern.YSE_fractions]
+        fields = []
+        for fraction in fractions:
+            fields.append(f"{fraction}_bazin")
+            fields.append(f"{fraction}_rainbow")
+        
+    else:
+        fields = [field]
+        
+    for fie in fields :
+        
+        if database != 'YSE':
+            
+            # Preprocess entire light curves
+            preprocess_target(object_class, database, fie)
+            print(f'{object_class} preprocessed for {fie}')
 
-    # Remove points after rising part and preprocess training data
-    train_test_rising_target(object_class, database, field)
-    rising_class = object_class + '_train_rising'
-    print(f'{rising_class} created')
-    preprocess_target(rising_class, database, field)
-    print(f'{rising_class} preprocessed')
+            # Remove bins of points and preprocess the training data
+            train_test_bins_target(object_class, database, fie)
+
+            bin_class = object_class + f'_train_w{kern.point_cut_window}'
+            print(f'{bin_class} for {fie} created')
+            preprocess_target(bin_class, database, fie)
+            print(f'{bin_class} for {fie} preprocessed')
+        
+            # Remove points after rising part and preprocess training data
+            train_test_rising_target(object_class, database, fie)
+            rising_class = object_class + '_train_rising'
+            print(f'{rising_class} created')
+            preprocess_target(rising_class, database, fie)
+            print(f'{rising_class} preprocessed')
+            
+        else:
+            for version in kern.seeds:
+                version_field = fie + f"_v{version}"
+                # Remove bins of points and preprocess the training data
+                train_test_bins_target(object_class, database, version_field)
+                bin_class = object_class + f'_train_w{kern.point_cut_window}'
+                preprocess_target(bin_class, database, version_field)
+            print(f'{bin_class} for {fie} preprocessed')
 
     for fex_function in fex_functions:
-        
-        # Feature extract the 3 preprocessed database
-        feature_extract_target(object_class, fex_function, cores, database, field)
-        print(f'{object_class} feature extracted with {fex_function}')
-        feature_extract_target(bin_class, fex_function, cores, database, field)
-        print(f'{bin_class} feature extracted with {fex_function}')
-        feature_extract_target(rising_class, fex_function, cores, database, field)
-        print(f'{rising_class} feature extracted with {fex_function}')
-    
-    print(f'{object_class} COMPLETED FEATURE EXTRACTED')
-    
-    
+        for fraction in fractions:
+            if database == 'YSE':
+                for version in kern.seeds:
+                    fie = fraction + '_' + fex_function + "_v" + str(version)
 
-    
+                    feature_extract_target(bin_class, fex_function, cores, database, fie, band_wavelength)
+                print(f'{object_class} {fie} feature extracted with {fex_function}')
+                
+            else:
+                fie = field
+                # Feature extract the 3 preprocessed database
+                feature_extract_target(object_class, fex_function, cores, database, fie, band_wavelength)
+                print(f'{object_class} feature extracted with {fex_function}')
+                
+                feature_extract_target(rising_class, fex_function, cores, database, fie, band_wavelength)
+                print(f'{rising_class} feature extracted with {fex_function}')
+                
+                feature_extract_target(bin_class, fex_function, cores, database, fie, band_wavelength)
+                print(f'{object_class} {fie} feature extracted with {fex_function}')
+
+    print(f'{object_class} COMPLETED FEATURE EXTRACTED')
 
     

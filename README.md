@@ -1,5 +1,7 @@
 Code associated to the Rainbow paper : https://arxiv.org/abs/2310.02916
 
+![My Remote Image](https://ibb.co/FKGWyZZ)
+
 The PLAsTiCC data is available at : https://zenodo.org/record/2539456
 The YSE data is available here : https://zenodo.org/records/7317476
 
